@@ -4,7 +4,7 @@ CLI `cb`, the thin local **agent**, the **preload** (`@cb/env/register`) and the
 **`env` API**. Runs on developer laptops: macOS, Linux, Windows (L8).
 
 - PRD: `../product.md` (§9 is this repo; §12 contracts; §13 security). Workspace rules: `../CLAUDE.md`.
-- Also read: `TRIALS.md` (raw M0 data). Decisions → PRD §20, open questions → PRD §19.
+- Also read: `docs/TRIALS.md` (raw M0 data, local only). Decisions → PRD §20, open questions → PRD §19.
 
 ## Git & GitHub
 
@@ -14,6 +14,9 @@ CLI `cb`, the thin local **agent**, the **preload** (`@cb/env/register`) and the
 - Every change goes on a new branch → pull request → merge into `main`. Never commit to `main` directly.
 - **Keep `../product.md` current:** any change to structure, tooling, contracts, defaults or behaviour is
   written into the PRD and logged in PRD §20 with a version bump, in the same change.
+
+- **Docs stay local:** everything under `docs/` (plans, specs, trial notes) is gitignored and never
+  pushed. Do not commit plan or design documents anywhere else in the repo.
 
 ## Hard rules for this repo
 
@@ -72,8 +75,8 @@ cb-env/
 │  ├─ integration/          # agent ↔ fake backend, IPC, keychain fallback
 │  ├─ e2e/                  # examples under `cb run` against a local cb-backend
 │  └─ security/             # canary suite (PRD §13)
-├─ docs/plans/              # milestone plans (superpowers:writing-plans)
-├─ TRIALS.md  README.md  CLAUDE.md
+├─ docs/                    # LOCAL ONLY (gitignored): plans/, TRIALS.md, notes
+├─ README.md  CLAUDE.md
 ├─ biome.json  tsconfig.json  vitest.config.ts
 └─ package.json
 ```
