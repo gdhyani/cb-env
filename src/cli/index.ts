@@ -4,6 +4,11 @@ import path from "node:path";
 import { Command } from "commander";
 import { PRODUCT_NAME } from "../constants";
 import { CbError } from "../shared/errors";
+import { registerAccountCommands } from "./commands/account";
+import { registerEnvCommands } from "./commands/env";
+import { registerInitCommand } from "./commands/init";
+import { registerLoginCommands } from "./commands/login";
+import { registerRunCommand } from "./commands/run";
 import { registerStatusCommand } from "./commands/status";
 
 // dist/cli/index.js → package root
@@ -11,8 +16,13 @@ const { version } = JSON.parse(readFileSync(path.join(__dirname, "..", "..", "pa
   version: string;
 };
 
-const program = new Command().name(PRODUCT_NAME).version(version).showHelpAfterError();
+const program = new Command().name(PRODUCT_NAME).version(version).showHelpAfterError().enablePositionalOptions();
 
+registerLoginCommands(program);
+registerAccountCommands(program);
+registerInitCommand(program);
+registerRunCommand(program);
+registerEnvCommands(program);
 registerStatusCommand(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {

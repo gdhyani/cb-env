@@ -1,9 +1,12 @@
 import { spawn } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { fail, HEALTH, ok, startStubServer } from "../helpers/stub-server";
 
 const BIN = path.resolve("dist/cli/index.js");
+const CB_HOME_DIR = mkdtempSync(path.join(tmpdir(), "cb-status-"));
 let stub: Awaited<ReturnType<typeof startStubServer>> | undefined;
 afterEach(async () => stub?.close());
 
@@ -11,7 +14,8 @@ afterEach(async () => stub?.close());
 function cb(args: string[]): Promise<{ status: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [BIN, ...args], {
-      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, CB_HOME: CB_HOME_DIR },
+      cwd: CB_HOME_DIR,
     });
     let stdout = "";
     let stderr = "";
@@ -44,7 +48,7 @@ describe("cb CLI (FR-PKG-008, FR-PKG-012)", () => {
     stub = await startStubServer({ "/api/health": ok(HEALTH) });
     const r = await cb(["status", "--server", stub.url, "--json"]);
     expect(r.status).toBe(0);
-    expect(JSON.parse(r.stdout)).toEqual({ server: stub.url, health: HEALTH });
+    expect(JSON.parse(r.stdout)).toMatchObject({ server: stub.url, health: HEALTH, user: null });
   });
 
   it("FR-PKG-012 unreachable backend exits 1 with an actionable message", async () => {

@@ -1,8 +1,10 @@
 import type { Command } from "commander";
 import { z } from "zod";
-import { DEFAULT_SERVER, ENV } from "../../constants";
+import { getServerCredentials } from "../../shared/credentials";
 import { formatDuration } from "../../shared/format";
 import { createBackendClient } from "../../shared/http";
+import { findProjectConfig } from "../../shared/project-config";
+import { out, resolveServer } from "../context";
 
 const HealthSchema = z.object({
   status: z.enum(["ok", "degraded"]),
@@ -11,28 +13,41 @@ const HealthSchema = z.object({
   checks: z.record(z.string(), z.enum(["up", "down"])),
 });
 
-interface StatusOptions {
-  server: string;
-  json?: boolean;
-}
-
+/** FR-PKG-008 (M0 subset): backend health, login and project link. */
 export function registerStatusCommand(program: Command): void {
   program
     .command("status")
-    .description("Show backend connectivity and health")
-    .option("--server <url>", "backend URL", process.env[ENV.server] ?? DEFAULT_SERVER)
+    .description("Show backend health, login and project link")
+    .option("--server <url>", "backend URL")
     .option("--json", "print machine-readable JSON")
-    .action(async (opts: StatusOptions) => {
-      const health = await createBackendClient({ serverUrl: opts.server }).get("/api/health", HealthSchema);
+    .action(async (opts: { server?: string; json?: boolean }) => {
+      const server = resolveServer(opts.server);
+      const health = await createBackendClient({ serverUrl: server }).get("/api/health", HealthSchema);
+      const creds = await getServerCredentials(server);
+      const project = findProjectConfig()?.config;
       if (opts.json) {
-        process.stdout.write(`${JSON.stringify({ server: opts.server, health })}\n`);
+        out(
+          JSON.stringify({
+            server,
+            health,
+            user: creds?.user ?? null,
+            device: creds?.deviceName ?? null,
+            project: project ?? null,
+          }),
+        );
         return;
       }
       const checks = Object.entries(health.checks)
         .map(([name, state]) => `${name} ${state}`)
         .join(", ");
-      process.stdout.write(
-        `server  ${opts.server}  ${health.status}  (${checks}, uptime ${formatDuration(health.uptimeSec)}, v${health.version})\n`,
+      out(
+        `server  ${server}  ${health.status}  (${checks}, uptime ${formatDuration(health.uptimeSec)}, v${health.version})`,
+      );
+      out(
+        `login   ${creds ? `${creds.user.email} (device "${creds.deviceName}")` : 'not logged in — run "npx cb login"'}`,
+      );
+      out(
+        `project ${project ? `${project.projectSlug ?? project.projectId} (default env: ${project.defaultEnvironment})` : 'not linked — run "npx cb init"'}`,
       );
     });
 }
