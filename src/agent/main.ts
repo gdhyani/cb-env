@@ -49,7 +49,7 @@ function onClient(socket: net.Socket) {
   socket.on("error", () => socket.destroy());
   socket.on("close", () => {
     clients.delete(socket);
-    for (const s of attached) s.clients.delete(socket);
+    for (const s of attached) s.detach(socket);
     if (clients.size === 0) idleSince = Date.now();
   });
   readLines(
@@ -108,7 +108,7 @@ function onClient(socket: net.Socket) {
         });
         return;
       }
-      session.clients.add(socket);
+      session.attach(socket, req.webhookPort);
       attached.add(session);
       log(`client attached to ${session.label} (${session.clients.size} client(s))`);
       void heartbeat();

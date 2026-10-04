@@ -87,4 +87,18 @@ route("/leak", async () => {
   return res.text();
 });
 
+// Razorpay webhooks, verified the usual way with the official SDK and the env var — cb delivers them re-signed for
+// this device, so this code is exactly what runs in production.
+const received = [];
+app.post("/webhooks/razorpay", express.raw({ type: "*/*" }), (req, res) => {
+  const verified = Razorpay.validateWebhookSignature(
+    req.body.toString("utf8"),
+    req.header("x-razorpay-signature") ?? "",
+    env.RAZORPAY_WEBHOOK_SECRET,
+  );
+  received.push({ verified, event: JSON.parse(req.body.toString("utf8")).event, id: req.header("x-razorpay-event-id") });
+  res.status(verified ? 200 : 400).end();
+});
+route("/webhooks/received", async () => received);
+
 app.listen(Number(env.PORT ?? 3100), "127.0.0.1", () => console.log(`express-mongo on :${env.PORT ?? 3100}`));

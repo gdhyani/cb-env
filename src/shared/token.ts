@@ -54,14 +54,23 @@ async function withLock<T>(env: NodeJS.ProcessEnv, fn: () => Promise<T>): Promis
   }
 }
 
-/** FR-AUTH-002/003: a valid access token for this server, refreshing (and rotating) when needed. */
-export async function getAccessToken(server: string, env: NodeJS.ProcessEnv = process.env): Promise<string> {
+/**
+ * FR-AUTH-002/003: a valid access token for this server, refreshing (and rotating) when needed. `rejected` is a
+ * token the server just refused (401): it is refreshed even if its expiry looks fine (clock skew, rotation).
+ */
+export async function getAccessToken(
+  server: string,
+  env: NodeJS.ProcessEnv = process.env,
+  rejected?: string,
+): Promise<string> {
+  const usable = (c: { accessToken?: string; accessTokenExpiresAt?: string }) =>
+    fresh(c) && (rejected === undefined || c.accessToken !== rejected);
   const creds = await requireServerCredentials(server, env);
-  if (fresh(creds)) return creds.accessToken as string;
+  if (usable(creds)) return creds.accessToken as string;
   return withLock(env, async () => {
     // Another process may have refreshed while we waited for the lock.
     const latest = await requireServerCredentials(server, env);
-    if (fresh(latest)) return latest.accessToken as string;
+    if (usable(latest)) return latest.accessToken as string;
     let pair: z.infer<typeof TokenPairSchema>;
     try {
       pair = await createBackendClient({ serverUrl: server, correlationId: newCorrelationId() }).post(

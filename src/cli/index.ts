@@ -14,6 +14,7 @@ import { registerRunCommand } from "./commands/run";
 import { registerShellCommand } from "./commands/shell";
 import { registerStatusCommand } from "./commands/status";
 import { registerTypesCommand } from "./commands/types";
+import { registerWebhooksCommand } from "./commands/webhooks";
 
 // dist/cli/index.js → package root
 const { version } = JSON.parse(readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8")) as {
@@ -33,6 +34,7 @@ registerUpDownCommands(program);
 registerShellCommand(program);
 registerTypesCommand(program);
 registerDoctorCommand(program);
+registerWebhooksCommand(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);
