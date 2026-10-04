@@ -14,6 +14,8 @@ export const AGENT_IDLE_MS = 8 * 60 * 60 * 1000;
 /** FR-AGT-007: `cb run` checks the daemon this often and respawns it if missing. */
 export const AGENT_HEALTH_MS = 5_000;
 export const AGENT_START_TIMEOUT_MS = 8_000;
+/** The agent reports version and open tunnels to each backend this often (dashboard "agent online"). */
+export const AGENT_HEARTBEAT_MS = 60_000;
 
 export const ENV = {
   home: "CB_HOME",

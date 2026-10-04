@@ -1,8 +1,12 @@
 import fs from "node:fs";
 import net from "node:net";
-import { AGENT_IDLE_MS, AGENT_VERSION, ENV } from "../constants";
+import { z } from "zod";
+import { AGENT_HEARTBEAT_MS, AGENT_IDLE_MS, AGENT_VERSION, ENV } from "../constants";
 import { AgentRequestSchema, readLines, writeLine } from "../shared/agent-ipc";
+import { newCorrelationId } from "../shared/correlation";
+import { getServerCredentials } from "../shared/credentials";
 import { CbError } from "../shared/errors";
+import { createBackendClient } from "../shared/http";
 import { agentLogPath, agentSocketPath } from "../shared/paths";
 import { redact } from "../shared/redact";
 import { Session, sessionId } from "./session";
@@ -90,6 +94,7 @@ function onClient(socket: net.Socket) {
       session.clients.add(socket);
       attached.add(session);
       log(`client attached to ${session.label} (${session.clients.size} client(s))`);
+      void heartbeat();
       writeLine(socket, {
         type: "attached",
         snapshotFile: session.agent?.snapshotFile ?? "",
@@ -126,6 +131,27 @@ function listen(retried = false) {
     log(`agent ${AGENT_VERSION} listening (pid ${process.pid}, idle exit after ${Math.round(idleMs / 60000)} min)`);
   });
 }
+
+/** Heartbeat to every backend we serve: version and open tunnels (dashboard shows the agent online). */
+async function heartbeat() {
+  const byServer = new Map<string, number>();
+  for (const s of sessions.values())
+    if (s.agent?.snapshot) byServer.set(s.key.server, (byServer.get(s.key.server) ?? 0) + s.agent.tunnels);
+  for (const [server, activeTunnels] of byServer) {
+    try {
+      const creds = await getServerCredentials(server, env);
+      if (!creds) continue;
+      await createBackendClient({ serverUrl: server, token: creds.token, correlationId: newCorrelationId() }).post(
+        "/api/agent/heartbeat",
+        { version: AGENT_VERSION, activeTunnels },
+        z.unknown(),
+      );
+    } catch (err) {
+      log(`heartbeat to ${server} failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+setInterval(() => void heartbeat(), AGENT_HEARTBEAT_MS).unref?.();
 
 // FR-AGT-007: exit after the idle period with no clients and no open tunnels.
 setInterval(
