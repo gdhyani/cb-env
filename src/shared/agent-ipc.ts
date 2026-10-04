@@ -17,6 +17,8 @@ export const AgentRequestSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("status") }),
   z.object({ type: z.literal("stop") }),
+  /** §13 canary suite only: write the agent's heap snapshot to `file` (refused unless CB_TEST_MODE=1). */
+  z.object({ type: z.literal("heap-snapshot"), file: z.string().min(1) }),
 ]);
 export type AgentRequest = z.infer<typeof AgentRequestSchema>;
 
@@ -47,6 +49,7 @@ export const AgentMessageSchema = z.discriminatedUnion("type", [
     sessions: z.array(SessionSummary),
   }),
   z.object({ type: z.literal("stopping") }),
+  z.object({ type: z.literal("heap-snapshot"), file: z.string() }),
   z.object({ type: z.literal("error"), code: z.string(), message: z.string() }),
   /** Snapshot rewritten with different env values: `cb run` restarts the app. */
   z.object({ type: z.literal("config.changed") }),

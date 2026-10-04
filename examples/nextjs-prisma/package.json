@@ -1,0 +1,31 @@
+{
+  "name": "cb-example-nextjs-prisma",
+  "private": true,
+  "description": "Next.js App Router + Prisma + official SDKs, unchanged, run under cb (PRD \u00a76 T3, \u00a715).",
+  "scripts": {
+    "dev": "prisma generate && next dev -p 3300",
+    "dev:webpack": "prisma generate && next dev --webpack -p 3300",
+    "build": "prisma generate && next build",
+    "start": "next start -p 3300",
+    "db:push": "prisma db push"
+  },
+  "dependencies": {
+    "@cb/env": "file:../..",
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "google-auth-library": "^11.1.0",
+    "next": "^16.3.8",
+    "next-auth": "^5.0.0-beta.32",
+    "openai": "^7.27.0",
+    "pg": "^8.23.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "stripe": "^23.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "prisma": "^7.10.0",
+    "typescript": "^7.0.2"
+  }
+}

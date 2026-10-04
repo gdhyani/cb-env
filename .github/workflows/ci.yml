@@ -37,6 +37,60 @@ jobs:
       # Tests never touch a real OS keychain (vitest config forces the file store).
       - run: npx vitest run
 
+  e2e:
+    name: e2e canaries (next ${{ matrix.next }})
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        next: [15, 16]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: cb-env
+      - uses: actions/checkout@v5
+        with:
+          repository: gdhyani/cb-backend
+          ref: main
+          path: cb-backend
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # Test-only credentials, generated per run and never stored anywhere.
+      - name: Generate throwaway test-service passwords
+        run: |
+          echo "CB_TEST_DB_PASSWORD=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          echo "CB_TEST_REDIS_PASSWORD=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+      - name: Start Postgres, MySQL, Redis, Mailpit and S3 test services
+        run: docker compose -f cb-backend/docker-compose.test.yml up -d --wait
+      - run: npm ci
+        working-directory: cb-backend
+      - run: npm ci && npm run build
+        working-directory: cb-env
+      - name: Install example apps
+        working-directory: cb-env/examples
+        run: |
+          (cd express-mongo && npm ci)
+          (cd nest-mysql && npm ci && npm run build)
+          (cd nextjs-prisma && npm ci)
+          # Next 15 does not support TypeScript 7.
+          if [ "${{ matrix.next }}" = 15 ]; then (cd nextjs-prisma && npm install next@15 typescript@6); fi
+      - name: Run the e2e canary suite (§13, §15, T3)
+        working-directory: cb-env
+        env:
+          CB_E2E_BACKEND_DIR: ${{ github.workspace }}/cb-backend
+          # Missing service passwords must fail the job, never skip the suite.
+          CB_E2E_REQUIRED: "1"
+          NEXT_TELEMETRY_DISABLED: "1"
+        # The non-Next examples do not depend on the Next version: run them once.
+        run: |
+          if [ "${{ matrix.next }}" = 15 ]; then npm run test:e2e -- nextjs-prisma; else npm run test:e2e; fi
+      # Evidence (heap snapshots) is never uploaded as an artifact.
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose -f cb-backend/docker-compose.test.yml logs --tail 50
+
   contract:
     name: contract types are current
     runs-on: ubuntu-latest

@@ -82,10 +82,16 @@ async function stubBackend() {
   };
 }
 
-async function setup(idleMs = 60_000) {
+async function setup(idleMs = 60_000, extraEnv: NodeJS.ProcessEnv = {}) {
   const backend = await stubBackend();
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "cbd-"));
-  const env = { ...process.env, CB_HOME: home, CB_CREDENTIAL_STORE: "file", CB_AGENT_IDLE_MS: String(idleMs) };
+  const env = {
+    ...process.env,
+    CB_HOME: home,
+    CB_CREDENTIAL_STORE: "file",
+    CB_AGENT_IDLE_MS: String(idleMs),
+    ...extraEnv,
+  };
   await saveServerCredentials(
     backend.url,
     {
@@ -183,6 +189,25 @@ describe("background agent daemon (FR-AGT-001, FR-AGT-006, FR-AGT-007)", () => {
     expect(await waitFor(() => seen.includes("access.revoked"))).toBe(true);
     const revoked = JSON.parse(fs.readFileSync(attached.snapshotFile, "utf8"));
     expect(revoked.status).toBe("revoked");
+    conn.close();
+  });
+
+  it("S1 heap-snapshot IPC is refused outside test mode", async () => {
+    const { env, home } = await setup(60_000, { CB_TEST_MODE: undefined });
+    const conn = await ipc.ensureAgent(env);
+    conn.send({ type: "heap-snapshot", file: path.join(home, "a.heapsnapshot") });
+    expect(await conn.next("error")).toMatchObject({ type: "error", code: "TEST_MODE_ONLY" });
+    expect(fs.existsSync(path.join(home, "a.heapsnapshot"))).toBe(false);
+    conn.close();
+  });
+
+  it("S1 heap-snapshot IPC writes the agent's heap in test mode (canary suite, §13)", async () => {
+    const { env, home } = await setup(60_000, { CB_TEST_MODE: "1" });
+    const conn = await ipc.ensureAgent(env);
+    const file = path.join(home, "agent.heapsnapshot");
+    conn.send({ type: "heap-snapshot", file });
+    expect(await conn.next("heap-snapshot")).toEqual({ type: "heap-snapshot", file });
+    expect(fs.statSync(file).size).toBeGreaterThan(1000);
     conn.close();
   });
 

@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Own schema: `db push` manages only these tables in a shared database.
+  schemas  = ["nextjs_example"]
+}
+
+model NextOrder {
+  id        Int      @id @default(autoincrement())
+  sku       String
+  createdAt DateTime @default(now())
+
+  @@schema("nextjs_example")
+}

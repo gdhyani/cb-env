@@ -9,7 +9,8 @@
     "ignoreUnknown": false,
     "includes": [
       "**",
-      "!src/shared/contract/**"
+      "!src/shared/contract/**",
+      "!examples/**"
     ]
   },
   "formatter": {
