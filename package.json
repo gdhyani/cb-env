@@ -17,7 +17,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "sync:contract": "node scripts/sync-contract.mjs"
+    "sync:contract": "node scripts/sync-contract.mjs",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.8.1",
@@ -34,6 +35,8 @@
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^26.6.4",
     "@types/ws": "^8.18.2",
+    "mongodb": "^7.7.0",
+    "mongodb-memory-server-core": "^11.3.0",
     "reflect-metadata": "^0.2.2",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
