@@ -86,7 +86,7 @@ export async function startMockUpstreams(c: Canaries, tls: { certPem: string; ke
         .split(":");
       if (secret !== c.razorpaySecret) return deny(res, secret ?? "");
       json(res, 200, {
-        id: "order_e2e",
+        id: `order_E2e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
         entity: "order",
         amount: JSON.parse(body || "{}").amount,
         currency: "INR",

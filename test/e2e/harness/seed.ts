@@ -21,6 +21,8 @@ export interface Seeded {
   projectId: string;
   envId: string;
   cookie: string;
+  /** Resource name → id (e.g. a webhook service's ingress URL is /api/hooks/<id>). */
+  resourceIds: Record<string, string>;
 }
 
 /** Cookie-session REST client for the admin (the dashboard's contract, §12.7 envelope). */
@@ -56,8 +58,10 @@ export async function seedProject(api: string, spec: SeedSpec): Promise<Seeded> 
   const orgId = me.data.memberships[0]?.orgId ?? "";
   const project = await call(api, cookie, "POST", `/orgs/${orgId}/projects`, { name: "Shop" });
   const envId = (project.data.environments as { id: string }[])[0]?.id ?? "";
+  const resourceIds: Record<string, string> = {};
   for (const r of spec.resources) {
     const created = await call(api, cookie, "POST", `/environments/${envId}/resources`, r.body);
+    resourceIds[String(r.body.name)] = String(created.data.id);
     for (const [key, field] of r.vars)
       await call(api, cookie, "POST", `/environments/${envId}/variables`, {
         type: "brokered",
@@ -71,7 +75,7 @@ export async function seedProject(api: string, spec: SeedSpec): Promise<Seeded> 
   for (const [key, format] of Object.entries(spec.generated ?? {}))
     await call(api, cookie, "POST", `/environments/${envId}/variables`, { type: "generated", key, format });
   await call(api, cookie, "POST", `/environments/${envId}/grants`, { userId: me.data.user.id });
-  return { api, orgId, projectId: String(project.data.id), envId, cookie };
+  return { api, orgId, projectId: String(project.data.id), envId, cookie, resourceIds };
 }
 
 /** Real device-code login: `cb login --no-browser`, the code read from its output and approved by the admin. */

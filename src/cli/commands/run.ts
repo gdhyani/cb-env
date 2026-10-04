@@ -42,8 +42,30 @@ export function buildChildEnv(
   };
 }
 
+/**
+ * FR-WH-003: the port webhooks are delivered to — `--webhook-port`, then `.cb/project.json` webhookPort, then the
+ * PORT the app will see (shell or cb variable). Undefined lets the service's default (or 3000) apply.
+ */
+export function resolveWebhookPort(
+  flag: string | undefined,
+  configured: number | undefined,
+  childEnv: NodeJS.ProcessEnv,
+): number | undefined {
+  const valid = (v: unknown) => {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 1 && n <= 65_535 ? n : undefined;
+  };
+  if (flag !== undefined) {
+    const n = valid(flag);
+    if (n === undefined) throw new CbError("BAD_FLAG", `cb run: --webhook-port must be a port number (got "${flag}")`);
+    return n;
+  }
+  return configured ?? valid(childEnv.PORT);
+}
+
 export interface RunOptions {
   env?: string;
+  webhookPort?: string;
   server?: string;
   restart?: boolean;
   cwd?: string;
@@ -64,7 +86,7 @@ export async function resolveEnvironmentName(
 /** Connects to the daemon (starting it if needed) and attaches this project environment. */
 async function attach(
   env: NodeJS.ProcessEnv,
-  request: { server: string; projectId: string; orgId?: string; environment: string },
+  request: { server: string; projectId: string; orgId?: string; environment: string; webhookPort?: number },
 ): Promise<{ conn: AgentConnection; snapshotFile: string; summary: SessionSummary }> {
   const conn = await ensureAgent(env);
   conn.send({ type: "attach", ...request });
@@ -85,9 +107,16 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
   const environment = await resolveEnvironmentName(config.projectId, opts.env, config.defaultEnvironment, parentEnv);
   const [file, ...args] = cmd;
   if (!file) throw new Error("cb run: missing command. Usage: cb run -- <command>");
-  const request = { server, projectId: config.projectId, orgId: config.orgId, environment };
-
-  let { conn, snapshotFile, summary } = await attach(parentEnv, request);
+  const base = { server, projectId: config.projectId, orgId: config.orgId, environment };
+  // PORT may itself be a cb variable: the first attach writes the snapshot, then the final port is re-sent.
+  const shellPort = resolveWebhookPort(opts.webhookPort, config.webhookPort, parentEnv);
+  let { conn, snapshotFile, summary } = await attach(parentEnv, { ...base, webhookPort: shellPort });
+  const webhookPort = resolveWebhookPort(opts.webhookPort, config.webhookPort, {
+    ...parentEnv,
+    ...readSnapshotSync(snapshotFile).env,
+  });
+  const request = { ...base, webhookPort };
+  if (webhookPort !== shellPort) conn.send({ type: "attach", ...request });
   // J7: while access is revoked or stopped, refuse to start (the preload would fail closed anyway).
   if (summary.revoked) {
     const reason = readSnapshotSync(snapshotFile).revokedReason ?? "access revoked";
@@ -182,9 +211,10 @@ export function registerRunCommand(program: Command): void {
     .option("--env <name>", "environment (default: project default or `cb env use`)")
     .option("--server <url>", "backend URL")
     .option("--no-restart", "do not restart the app when configuration changes")
+    .option("--webhook-port <port>", "port your app listens on for webhooks cb delivers (default: PORT, then 3000)")
     .argument("<cmd...>", "command to run, after --")
     .passThroughOptions()
-    .action(async (cmd: string[], opts: { env?: string; server?: string; restart: boolean }) => {
+    .action(async (cmd: string[], opts: { env?: string; server?: string; restart: boolean; webhookPort?: string }) => {
       const code = await runCommand(cmd, opts);
       // Mirror the child's exit immediately; lingering keep-alive or stream handles must not keep cb alive.
       process.exit(code);

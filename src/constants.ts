@@ -28,6 +28,9 @@ export const ENV = {
   credentialStore: "CB_CREDENTIAL_STORE",
   /** Overrides AGENT_IDLE_MS (tests). */
   agentIdleMs: "CB_AGENT_IDLE_MS",
+  /** Override the event-stream watchdog and backoff cap (soak tests; ms). */
+  eventsIdleMs: "CB_EVENTS_IDLE_MS",
+  eventsBackoffMaxMs: "CB_EVENTS_BACKOFF_MAX_MS",
   /** "1" enables test-only agent commands (heap snapshot for the §13 canary suite). */
   testMode: "CB_TEST_MODE",
 } as const;
@@ -50,3 +53,16 @@ export const MSG = {
   badResponse: (server: string, status: number) =>
     `cb: ${server} answered with an unexpected response (HTTP ${status}). Check that --server points at a cb backend.`,
 } as const;
+
+/** FR-AGT-006 event stream: the backend heartbeats every 15 s; 45 s of silence = a dead connection. */
+export const EVENTS_IDLE_MS = 45_000;
+export const EVENTS_TICK_MS = 5_000;
+/** A watchdog tick this late means the machine slept (or the process was frozen): reconnect at once. */
+export const EVENTS_WAKE_GAP_MS = 20_000;
+export const EVENTS_BACKOFF_BASE_MS = 500;
+export const EVENTS_BACKOFF_MAX_MS = 30_000;
+/** FR-WH-003: how long the app gets to answer a webhook, and how many delivery results the agent remembers. */
+export const WEBHOOK_APP_TIMEOUT_MS = 10_000;
+export const WEBHOOK_DEDUPE_SIZE = 2_000;
+/** App port when neither the run nor the service names one. */
+export const WEBHOOK_DEFAULT_PORT = 3000;

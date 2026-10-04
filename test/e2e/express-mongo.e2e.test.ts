@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -37,8 +38,19 @@ describe.skipIf(!servicesAvailable())("examples/express-mongo under cb run (§15
         { body: { kind: "redis", name: "cache", connectionUri: services.redis }, vars: [["REDIS_URL", "url"]] },
         {
           body: {
+            kind: "webhook",
+            name: "razorpay-webhooks",
+            provider: "razorpay",
+            path: "/webhooks/razorpay",
+            signingSecret: c.razorpayWebhookSecret,
+          },
+          vars: [["RAZORPAY_WEBHOOK_SECRET", "secret"]],
+        },
+        {
+          body: {
             kind: "http",
             name: "razorpay",
+            provider: "razorpay",
             upstreamUrl: mocks.url("razorpay"),
             authScheme: "basic-password",
             apiKey: c.razorpaySecret,
@@ -136,6 +148,34 @@ describe.skipIf(!servicesAvailable())("examples/express-mongo under cb run (§15
     expect(body, JSON.stringify(body)).toMatchObject({ ok: true });
     // APNs reports per-device results instead of throwing: a failed send must not look like success.
     if (route === "/apns") expect(body.result).toEqual({ sent: 1, failed: 0 });
+  });
+
+  it("FR-WH-001..003 a Razorpay webhook for the order this app created reaches it, verified by the SDK with its fake", async () => {
+    const order = (await (await fetch(`${base}/razorpay`)).json()) as { result: { id: string } };
+    await new Promise((r) => setTimeout(r, 300)); // the gateway records the order's owner off the response path
+    const body = JSON.stringify({
+      event: "payment.captured",
+      payload: { payment: { entity: { id: "pay_E2eCaptured01", order_id: order.result.id, amount: 500 } } },
+    });
+    const seeded = suite.seeded;
+    if (!seeded) throw new Error("not seeded");
+    const res = await fetch(`${seeded.api}/api/hooks/${seeded.resourceIds["razorpay-webhooks"]}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-razorpay-event-id": "E2eRzpEvent0001",
+        "x-razorpay-signature": createHmac("sha256", suite.canaries.razorpayWebhookSecret).update(body).digest("hex"),
+      },
+      body,
+    });
+    expect(res.status).toBe(200);
+    let received: { verified: boolean; event: string; id: string }[] = [];
+    for (let i = 0; i < 100 && received.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      received = ((await (await fetch(`${base}/webhooks/received`)).json()) as { result: typeof received }).result;
+    }
+    suite.saveResponse("webhooks-received", received);
+    expect(received).toEqual([{ verified: true, event: "payment.captured", id: "E2eRzpEvent0001" }]);
   });
 
   it("FR-GW-006 a provider echoing the real key is redacted before the app sees it", async () => {

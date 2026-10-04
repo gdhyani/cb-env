@@ -42,6 +42,8 @@ export const ProjectConfigSchema = z.object({
   projectId: z.string(),
   projectSlug: z.string().optional(),
   defaultEnvironment: z.string(),
+  /** FR-WH-003: port your app listens on, for webhooks cb delivers (overridden by cb run --webhook-port). */
+  webhookPort: z.number().int().min(1).max(65_535).optional(),
 });
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
 

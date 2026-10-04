@@ -14,6 +14,8 @@ export const AgentRequestSchema = z.discriminatedUnion("type", [
     projectId: z.string().min(1),
     orgId: z.string().optional(),
     environment: z.string().min(1),
+    /** FR-WH-003: where this run's app listens, for webhook delivery (cb run --webhook-port / webhookPort / PORT). */
+    webhookPort: z.number().int().min(1).max(65_535).optional(),
   }),
   z.object({ type: z.literal("status") }),
   z.object({ type: z.literal("stop") }),

@@ -19,6 +19,8 @@ export function makeCanaries() {
     openai: `sk-${tag("openai")}`,
     anthropic: `sk-ant-${tag("anthropic")}`,
     razorpaySecret: tag("razorpay"),
+    /** Razorpay webhook signing secret: only cb's ingress may ever hold it (FR-WH-001). */
+    razorpayWebhookSecret: tag("rzpwebhook"),
     googleClientSecret: tag("google"),
     awsAccessKeyId: `AKIA${randomBytes(8).toString("hex").toUpperCase()}`,
     awsSecretAccessKey: tag("aws"),

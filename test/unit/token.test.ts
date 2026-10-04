@@ -76,6 +76,27 @@ describe("access-token refresh (FR-AUTH-002/003)", () => {
     expect(backend.calls()).toBe(0);
   });
 
+  it("FR-AGT-006 a token the server rejected (401) is refreshed even if it looks fresh; other callers keep theirs", async () => {
+    const backend = await refreshServer();
+    const env = home();
+    await saveServerCredentials(
+      backend.url,
+      {
+        token: "cbr_0",
+        accessToken: "looks-fresh",
+        accessTokenExpiresAt: new Date(Date.now() + 600_000).toISOString(),
+        deviceId: "d",
+        deviceName: "m",
+        user,
+      },
+      env,
+    );
+    expect(await getAccessToken(backend.url, env, "some-older-token")).toBe("looks-fresh");
+    expect(backend.calls()).toBe(0);
+    expect(await getAccessToken(backend.url, env, "looks-fresh")).toBe("access-1");
+    expect(backend.calls()).toBe(1);
+  });
+
   it("refreshes an expired token once even with concurrent callers, and stores the rotated pair", async () => {
     const backend = await refreshServer();
     const env = home();

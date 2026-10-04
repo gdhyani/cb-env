@@ -93,6 +93,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hooks/{serviceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Provider webhook ingress (public; the provider signature is the only trust)
+         * @description FR-WH-001. Raw body ≤ 1 MB; verified with the real signing secret (Stripe stripe-signature with a 300 s tolerance, Razorpay x-razorpay-signature). Answers at once; delivery to the device happens afterwards. Provider retries of the same event id return duplicate=true.
+         */
+        post: operations["ingestWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/webhooks/listen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Also receive events nobody owns on this device for 12 h (`cb webhooks listen`), or stop */
+        post: operations["listenWebhooks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/webhooks/redeliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** An app started under cb on this device — push its pending webhooks now */
+        post: operations["redeliverWebhooks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/webhooks/{deliveryId}/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The agent reports what the app answered for a delivery (only its own deliveries)
+         * @description ok=false schedules a retry (5 s, 15 s, 1 min, 5 min, 15 min, then every 30 min, up to 24 h).
+         */
+        post: operations["ackWebhookDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/environments/{envId}/webhook-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent webhook events with per-device delivery status (admin, paginated, 24 h; never bodies) */
+        get: operations["listWebhookEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/webhook-events/{eventId}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a webhook event again for its devices (admin; within 24 h) */
+        post: operations["replayWebhookEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/presets": {
         parameters: {
             query?: never;
@@ -1029,7 +1137,7 @@ export interface components {
              */
             group?: "ai" | "oauth";
             /** @enum {string} */
-            kind: "mongodb" | "redis" | "postgres" | "mysql" | "smtp" | "http" | "oauth" | "aws" | "google-sa" | "apns";
+            kind: "mongodb" | "redis" | "postgres" | "mysql" | "smtp" | "http" | "oauth" | "aws" | "google-sa" | "apns" | "webhook";
             description: string;
             /** @description Non-secret create fields for the kind. */
             defaults: {
@@ -1045,12 +1153,54 @@ export interface components {
                 hint: string;
             }[];
         };
+        /** @description SSE `webhook` event data (agent stream). Body is base64; headers are signed with the device fake. */
+        WebhookPush: {
+            deliveryId: components["schemas"]["ObjectId"];
+            /** @description Bumped by Replay; agents dedupe on deliveryId + generation. */
+            generation: number;
+            eventId: string;
+            /** @enum {string} */
+            provider: "stripe" | "razorpay";
+            type: string;
+            path: string;
+            port: number | null;
+            headers: {
+                [key: string]: string;
+            };
+            body: string;
+        };
+        WebhookEvent: {
+            id: components["schemas"]["ObjectId"];
+            eventId: string;
+            type: string;
+            provider: string;
+            serviceId: components["schemas"]["ObjectId"];
+            serviceName: string;
+            /** @enum {string} */
+            routing: "matched" | "unmatched";
+            /** Format: date-time */
+            receivedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            deliveries: {
+                id: components["schemas"]["ObjectId"];
+                /** @enum {string} */
+                status: "pending" | "delivered" | "skipped" | "expired";
+                attempts: number;
+                appStatus: number | null;
+                lastError: string | null;
+                /** Format: date-time */
+                deliveredAt: string | null;
+                deviceName: string;
+                userEmail: string;
+            }[];
+        };
         /** @example 665f1c2ab3e4d5f6a7b8c9d0 */
         ObjectId: string;
         /** @enum {string} */
         Role: "owner" | "admin" | "developer";
         /** @enum {string} */
-        ResourceKind: "mongodb" | "redis" | "postgres" | "mysql" | "smtp" | "http" | "oauth" | "aws" | "google-sa" | "apns";
+        ResourceKind: "mongodb" | "redis" | "postgres" | "mysql" | "smtp" | "http" | "oauth" | "aws" | "google-sa" | "apns" | "webhook";
         /** @enum {string} */
         VariableType: "plain" | "generated" | "visible" | "brokered";
         /** @enum {string} */
@@ -1283,6 +1433,11 @@ export interface components {
             brokeredFields: string[];
             /** Format: date-time */
             createdAt: string;
+            /**
+             * Format: uri
+             * @description Webhook services only — paste into the provider's webhook settings (PUBLIC_URL + /api/hooks/{id}).
+             */
+            webhookUrl?: string;
         };
         Profile: {
             name: string;
@@ -1613,6 +1768,8 @@ export interface components {
             provider?: string;
             /** @description Authenticated GET used by the connection test (set by presets, e.g. /v1/balance). */
             testPath?: string;
+            /** @description Basic auth username (public key ID, e.g. Razorpay key_id); the stored key is the password. */
+            basicUser?: string;
             /** @description Real API key. */
             apiKey: string;
             /** @default cb_ */
@@ -1705,9 +1862,35 @@ export interface components {
             upstreamUrl?: string;
             redirectHosts?: string[];
         };
-        CreateResourceBody: components["schemas"]["CreatePostgresResource"] | components["schemas"]["CreateMysqlResource"] | components["schemas"]["CreateMongodbResource"] | components["schemas"]["CreateRedisResource"] | components["schemas"]["CreateSmtpResource"] | components["schemas"]["CreateHttpResource"] | components["schemas"]["CreateOauthResource"] | components["schemas"]["CreateAwsResource"] | components["schemas"]["CreateGoogleSaResource"] | components["schemas"]["CreateApnsResource"];
+        /** @description FR-WH-001 webhook signing secret. Providers post to /api/hooks/{serviceId}; cb verifies with this secret and pushes each event, re-signed with the device's fake, to the device that caused it. */
+        CreateWebhookResource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "webhook";
+            name: string;
+            /** @enum {string} */
+            provider: "stripe" | "razorpay";
+            /**
+             * @description Path in the developer's app the agent posts to on 127.0.0.1 (no scheme, host or leading //).
+             * @example /api/webhooks/stripe
+             */
+            path: string;
+            /** @description Default app port when the developer's run does not tell the agent one. */
+            port?: number;
+            /** @description Real signing secret (Stripe whsec_…, Razorpay webhook secret). */
+            signingSecret: string;
+        };
+        CreateResourceBody: components["schemas"]["CreatePostgresResource"] | components["schemas"]["CreateMysqlResource"] | components["schemas"]["CreateMongodbResource"] | components["schemas"]["CreateRedisResource"] | components["schemas"]["CreateSmtpResource"] | components["schemas"]["CreateHttpResource"] | components["schemas"]["CreateOauthResource"] | components["schemas"]["CreateAwsResource"] | components["schemas"]["CreateGoogleSaResource"] | components["schemas"]["CreateApnsResource"] | components["schemas"]["CreateWebhookResource"];
         /** @description All fields optional; fields that do not apply to the resource's kind are ignored. */
         UpdateResourceBody: {
+            /** @description Webhook services — replace the real signing secret (device fakes stay the same). */
+            signingSecret?: string;
+            /** @description Webhook services — path in the app the agent posts to. */
+            path?: string;
+            /** @description Webhook services — default app port; null clears it. */
+            port?: number | null;
             /** @description Trimmed. */
             name?: string;
             /** @description true closes every live tunnel to this service (J7). */
@@ -2248,6 +2431,254 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    ingestWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serviceId: components["schemas"]["ObjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: {
+                            /** @constant */
+                            accepted: true;
+                            duplicate: boolean;
+                        };
+                    };
+                };
+            };
+            /** @description WEBHOOK_SIGNATURE_INVALID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            /** @description PAYLOAD_TOO_LARGE */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description RATE_LIMITED */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listenWebhooks: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Project id or slug (like bootstrap). */
+                    projectId: string;
+                    /** @description Environment name. */
+                    env: string;
+                    orgId?: string;
+                    unmatched: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: {
+                            listening: boolean;
+                            /** Format: date-time */
+                            expiresAt: string | null;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    redeliverWebhooks: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    projectId: string;
+                    env: string;
+                    orgId?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: {
+                            queued: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    ackWebhookDelivery: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+            };
+            path: {
+                deliveryId: components["schemas"]["ObjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ok: boolean;
+                    status?: number;
+                    error?: string;
+                    ms?: number;
+                    /** @description Push generation this answers; stale ones are ignored. */
+                    generation?: number;
+                    /** @description No app runs under cb on the device; not counted as a failed attempt. */
+                    noApp?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: {
+                            /** @enum {string} */
+                            status: "pending" | "delivered" | "skipped" | "expired";
+                            retryInMs?: number;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listWebhookEvents: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number;
+            };
+            header?: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+            };
+            path: {
+                envId: components["schemas"]["ObjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedEnvelope"] & {
+                        data: components["schemas"]["WebhookEvent"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    replayWebhookEvent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+            };
+            path: {
+                eventId: components["schemas"]["ObjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: {
+                            queued: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listPresets: {
