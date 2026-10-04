@@ -28,6 +28,8 @@ export const ENV = {
   credentialStore: "CB_CREDENTIAL_STORE",
   /** Overrides AGENT_IDLE_MS (tests). */
   agentIdleMs: "CB_AGENT_IDLE_MS",
+  /** "1" enables test-only agent commands (heap snapshot for the §13 canary suite). */
+  testMode: "CB_TEST_MODE",
 } as const;
 
 // PRD Appendix B — cause, effect, next step.

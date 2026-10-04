@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import net from "node:net";
+import v8 from "node:v8";
 import { z } from "zod";
 import { AGENT_HEARTBEAT_MS, AGENT_IDLE_MS, AGENT_VERSION, ENV } from "../constants";
 import { AgentRequestSchema, readLines, writeLine } from "../shared/agent-ipc";
@@ -68,6 +69,19 @@ function onClient(socket: net.Socket) {
           uptimeMs: Date.now() - startedAt,
           sessions: [...sessions.values()].map((s) => s.summary()),
         });
+        return;
+      }
+      if (req.type === "heap-snapshot") {
+        // The canary suite scans the agent's memory for real secrets; never available outside tests.
+        if (process.env[ENV.testMode] !== "1") {
+          writeLine(socket, {
+            type: "error",
+            code: "TEST_MODE_ONLY",
+            message: "cb: heap snapshots are available only when CB_TEST_MODE=1",
+          });
+          return;
+        }
+        writeLine(socket, { type: "heap-snapshot", file: v8.writeHeapSnapshot(req.file) });
         return;
       }
       if (req.type === "stop") {
