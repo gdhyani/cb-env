@@ -6,8 +6,9 @@ import type { Snapshot } from "../../src/shared/schemas";
 
 export const REGISTER = path.resolve("dist/register/index.js");
 
-export function runNode(args: string[], env: NodeJS.ProcessEnv = {}) {
+export function runNode(args: string[], env: NodeJS.ProcessEnv = {}, cwd?: string) {
   const r = spawnSync(process.execPath, args, {
+    cwd,
     env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, CB_CREDENTIAL_STORE: "file", ...env },
     encoding: "utf8",
     timeout: 15_000,

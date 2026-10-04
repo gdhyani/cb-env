@@ -37,7 +37,14 @@
     "vitest": "^5.0.3"
   },
   "exports": {
+    ".": {
+      "types": "./dist/api/index.d.ts",
+      "browser": "./dist/api/browser-stub.js",
+      "default": "./dist/api/index.js"
+    },
     "./register": "./dist/register/index.js",
     "./package.json": "./package.json"
-  }
+  },
+  "main": "./dist/api/index.js",
+  "types": "./dist/api/index.d.ts"
 }

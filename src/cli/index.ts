@@ -5,12 +5,15 @@ import { Command } from "commander";
 import { PRODUCT_NAME } from "../constants";
 import { CbError } from "../shared/errors";
 import { registerAccountCommands } from "./commands/account";
-import { registerAgentCommands } from "./commands/agent";
+import { registerAgentCommands, registerUpDownCommands } from "./commands/agent";
+import { registerDoctorCommand } from "./commands/doctor";
 import { registerEnvCommands } from "./commands/env";
 import { registerInitCommand } from "./commands/init";
 import { registerLoginCommands } from "./commands/login";
 import { registerRunCommand } from "./commands/run";
+import { registerShellCommand } from "./commands/shell";
 import { registerStatusCommand } from "./commands/status";
+import { registerTypesCommand } from "./commands/types";
 
 // dist/cli/index.js → package root
 const { version } = JSON.parse(readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8")) as {
@@ -26,6 +29,10 @@ registerRunCommand(program);
 registerEnvCommands(program);
 registerStatusCommand(program);
 registerAgentCommands(program);
+registerUpDownCommands(program);
+registerShellCommand(program);
+registerTypesCommand(program);
+registerDoctorCommand(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);
