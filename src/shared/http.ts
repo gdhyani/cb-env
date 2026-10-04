@@ -13,18 +13,28 @@ export interface BackendClientOptions {
 export interface BackendClient {
   readonly correlationId: string;
   get<T extends z.ZodType>(path: string, schema: T): Promise<z.infer<T>>;
+  post<T extends z.ZodType>(path: string, body: unknown, schema: T): Promise<z.infer<T>>;
   getPaginated<T extends z.ZodType>(path: string, item: T): Promise<{ items: z.infer<T>[]; pagination: Pagination }>;
 }
 
 export function createBackendClient(opts: BackendClientOptions): BackendClient {
   const correlationId = opts.correlationId ?? newCorrelationId();
 
-  async function request(path: string): Promise<{ status: number; body: unknown }> {
+  async function request(
+    path: string,
+    init: { method?: string; body?: unknown } = {},
+  ): Promise<{ status: number; body: unknown }> {
     const headers: Record<string, string> = { accept: "application/json", [CORRELATION_HEADER]: correlationId };
     if (opts.token) headers.authorization = `Bearer ${opts.token}`;
+    if (init.body !== undefined) headers["content-type"] = "application/json";
     let res: Response;
     try {
-      res = await fetch(new URL(path, opts.serverUrl), { headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      res = await fetch(new URL(path, opts.serverUrl), {
+        method: init.method ?? "GET",
+        headers,
+        body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
     } catch (cause) {
       throw new CbError("BACKEND_UNREACHABLE", MSG.unreachable(opts.serverUrl), { correlationId, cause });
     }
@@ -41,6 +51,13 @@ export function createBackendClient(opts: BackendClientOptions): BackendClient {
     const error = ApiErrorBodySchema.safeParse(body);
     if (error.success) {
       const e = error.data.error;
+      // A rejected device token means this machine must log in again (expired, revoked or logged out).
+      if (e.code === "UNAUTHORIZED" && opts.token) {
+        throw new CbError("NOT_LOGGED_IN", MSG.notLoggedIn, {
+          statusCode: e.statusCode,
+          correlationId: e.correlationId,
+        });
+      }
       throw new CbError(e.code, e.message, { statusCode: e.statusCode, correlationId: e.correlationId });
     }
     return { status: res.status, body };
@@ -57,6 +74,13 @@ export function createBackendClient(opts: BackendClientOptions): BackendClient {
       const parsed = apiSuccessSchema(schema).safeParse(body);
       if (!parsed.success) throw badResponse(status);
       // zod cannot infer through the generic envelope; the schema above guarantees this shape.
+      return (parsed.data as { data: z.infer<typeof schema> }).data;
+    },
+    async post(path, body, schema) {
+      const { status, body: resBody } = await request(path, { method: "POST", body });
+      const parsed = apiSuccessSchema(schema).safeParse(resBody);
+      if (!parsed.success) throw badResponse(status);
+      // Same generic-inference limitation as get().
       return (parsed.data as { data: z.infer<typeof schema> }).data;
     },
     async getPaginated(path, item) {

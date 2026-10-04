@@ -17,3 +17,7 @@ export function statePath(env: NodeJS.ProcessEnv = process.env): string {
 export function logsDir(env: NodeJS.ProcessEnv = process.env): string {
   return path.join(cbHome(env), "logs");
 }
+
+export function credentialsPath(env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(cbHome(env), "credentials.json");
+}
