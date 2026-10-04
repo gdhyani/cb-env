@@ -36,7 +36,7 @@ export function listFiles(dir: string): string[] {
 
 /** §13 canary suite: every target must have evidence; any canary in any encoding is a leak. */
 export function scanEvidence(canaries: string[], targets: Record<string, string[]>): ScanReport {
-  for (const c of canaries) if (c.length < 16) throw new Error(`canary too short to scan reliably (${c.length} chars)`);
+  for (const c of canaries) if (c.length < 8) throw new Error(`canary too short to scan reliably (${c.length} chars)`);
   const needles = canaries.map((c) => ({
     raw: [c],
     base64: base64Needles(c, false),

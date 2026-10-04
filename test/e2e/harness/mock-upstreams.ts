@@ -176,7 +176,12 @@ export async function startMockUpstreams(c: Canaries, tls: { certPem: string; ke
     fakesSeen: () => [...fakes],
     calls: (p: Provider) => counts.get(p) ?? 0,
     close: async () => {
-      await Promise.all([...servers.values()].map((s) => new Promise<void>((r) => s.close(() => r()))));
+      // Open HTTP/2 sessions keep close() pending; never let teardown hang on them.
+      await Promise.all(
+        [...servers.values()].map((s) =>
+          Promise.race([new Promise<void>((r) => s.close(() => r())), new Promise((r) => setTimeout(r, 2000))]),
+        ),
+      );
     },
   };
 }

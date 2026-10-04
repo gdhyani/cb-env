@@ -20,9 +20,13 @@ export interface RunningApp {
   stop(): Promise<void>;
 }
 
+/** The harness's own secrets (compose passwords) must not reach the app through the inherited environment. */
+const HARNESS_ONLY = ["CB_TEST_DB_PASSWORD", "CB_TEST_REDIS_PASSWORD"];
+
 export function cbEnvFor(cbHome: string, evidenceDir: string, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const inherited = Object.fromEntries(Object.entries(process.env).filter(([k]) => !HARNESS_ONLY.includes(k)));
   return {
-    ...process.env,
+    ...inherited,
     CB_HOME: cbHome,
     CB_CREDENTIAL_STORE: "file",
     CB_TEST_MODE: "1",

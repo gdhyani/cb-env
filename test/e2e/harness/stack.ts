@@ -34,7 +34,8 @@ export async function startBackend(cfg: HarnessConfig, opts: { mongoUri: string;
     env: {
       PATH: process.env.PATH,
       HOME: process.env.HOME,
-      NODE_ENV: "test",
+      // development, not test: the logger is silent under NODE_ENV=test and the backend log is a canary target.
+      NODE_ENV: "development",
       PORT: String(port),
       LOG_LEVEL: "debug",
       MONGODB_URI: opts.mongoUri,
