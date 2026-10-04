@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -100,11 +101,27 @@ async function setup(idleMs = 60_000) {
   return { backend, env, home };
 }
 
-const waitFor = async (check: () => boolean | Promise<boolean>, ms = 5000) => {
+/**
+ * Is the agent still listening? Unix: the socket file. Windows named pipes are not files, so probe with a
+ * connection that closes at once (callers space probes out so they don't keep the agent busy).
+ */
+const agentListening = (env: NodeJS.ProcessEnv) =>
+  process.platform === "win32"
+    ? new Promise<boolean>((resolve) => {
+        const s = net.connect(agentSocketPath(env));
+        s.once("connect", () => {
+          s.destroy();
+          resolve(true);
+        });
+        s.once("error", () => resolve(false));
+      })
+    : Promise.resolve(fs.existsSync(agentSocketPath(env)));
+
+const waitFor = async (check: () => boolean | Promise<boolean>, ms = 5000, everyMs = 100) => {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
     if (await check()) return true;
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, everyMs));
   }
   return false;
 };
@@ -169,11 +186,11 @@ describe("background agent daemon (FR-AGT-001, FR-AGT-006, FR-AGT-007)", () => {
     await conn.next("attached");
     conn.close();
     // Watch the socket file: probing with a connection would itself count as a client and keep it alive.
-    expect(await waitFor(() => !fs.existsSync(agentSocketPath(env)), 6000)).toBe(true);
+    expect(await waitFor(async () => !(await agentListening(env)), 8000, 1500)).toBe(true);
 
     const restarted = await ipc.ensureAgent(env);
     restarted.send({ type: "stop" });
     expect((await restarted.next("stopping")).type).toBe("stopping");
-    expect(await waitFor(() => !fs.existsSync(agentSocketPath(env)))).toBe(true);
+    expect(await waitFor(async () => !(await agentListening(env)), 8000, 1500)).toBe(true);
   });
 });

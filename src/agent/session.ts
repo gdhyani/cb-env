@@ -68,8 +68,10 @@ export class Session {
         if (event.type === "access.revoked" && !this.revoked) {
           this.revoked = true;
           this.#log(`session ${this.label}: access revoked (${event.reason})`);
-          void this.agent?.revoke(event.reason);
-          this.broadcast({ type: "access.revoked", reason: event.reason });
+          // Notify only once the snapshot says "revoked", so an app restarted on this event fails closed.
+          void Promise.resolve(this.agent?.revoke(event.reason)).finally(() =>
+            this.broadcast({ type: "access.revoked", reason: event.reason }),
+          );
         }
       },
       onError: (message) => this.#log(`session ${this.label}: events stream error — ${message}`),
