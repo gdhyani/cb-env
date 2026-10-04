@@ -755,6 +755,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/environments/{envId}/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a service and its variables in one step (admin); tested first, nothing saved on failure
+         * @description D1. Validates every key, applies the preset defaults, runs a connection test from the gateway (unless test is false), then creates the hidden service (name derived from the key), the main brokered variable and the extra keys. Any failure leaves nothing behind.
+         */
+        post: operations["createService"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/environments/{envId}/variables": {
         parameters: {
             query?: never;
@@ -962,6 +982,35 @@ export interface components {
             version: string;
             activeTunnels: number;
         };
+        /** @description D1 one-step setup. `resource` holds the Create*Resource fields for its kind without `name`; secret fields inside it are write-only. Fake values and fake prefixes are never accepted from clients beyond the presets. */
+        CreateServiceBody: {
+            /** @description The main variable's key, chosen by the admin (D2). */
+            key: string;
+            /** @description Preset id from GET /api/presets; its defaults are applied first. */
+            preset?: string;
+            /** @description Brokered field for the main variable; defaults to the kind's secret field (url, key, clientSecret, secretAccessKey, credentialsJson). */
+            mainField?: string;
+            /** @default [] */
+            extras: ({
+                key: string;
+                field: string;
+            } | {
+                key: string;
+                value: string;
+            })[];
+            /** @default true */
+            test: boolean;
+            resource: {
+                kind: components["schemas"]["ResourceKind"];
+            } & {
+                [key: string]: unknown;
+            };
+        };
+        ServiceCreated: {
+            service: components["schemas"]["Resource"];
+            variables: components["schemas"]["Variable"][];
+            test: components["schemas"]["ResourceTestResult"] | null;
+        };
         ResourceTestResult: {
             ok: boolean;
             profile: string;
@@ -974,6 +1023,11 @@ export interface components {
             name: string;
             /** @enum {string} */
             category: "AI" | "Payments" | "Auth" | "Push" | "Storage" | "Email" | "Database";
+            /**
+             * @description Providers listed inside one dashboard type (AI API key, sign-in) (D6).
+             * @enum {string}
+             */
+            group?: "ai" | "oauth";
             /** @enum {string} */
             kind: "mongodb" | "redis" | "postgres" | "mysql" | "smtp" | "http" | "oauth" | "aws" | "google-sa" | "apns";
             description: string;
@@ -1001,8 +1055,11 @@ export interface components {
         VariableType: "plain" | "generated" | "visible" | "brokered";
         /** @enum {string} */
         GeneratedFormat: "hex:32" | "hex:64" | "base64:32" | "base64url:32" | "alnum:32" | "alnum:48" | "uuid";
-        /** @enum {string} */
-        AuthScheme: "bearer" | "x-api-key" | "basic-password";
+        /**
+         * @description header = the key travels in the header named by authHeader (D12).
+         * @enum {string}
+         */
+        AuthScheme: "bearer" | "x-api-key" | "basic-password" | "header";
         /**
          * @description Lowercase letters, digits and dashes (input is trimmed and lowercased).
          * @example development
@@ -1545,11 +1602,17 @@ export interface components {
             name: string;
             /**
              * Format: uri
-             * @description Must be an https:// URL.
+             * @description https://, or http:// only for private addresses (10/8, 172.16/12, 192.168/16, 127/8, ::1, fc00::/7, localhost) (D11).
              */
             upstreamUrl: string;
             /** @default bearer */
             authScheme: components["schemas"]["AuthScheme"];
+            /** @description Required when authScheme is header (D12). */
+            authHeader?: string;
+            /** @description UI hint (preset or dashboard type that made the service); never used by the gateway. */
+            provider?: string;
+            /** @description Authenticated GET used by the connection test (set by presets, e.g. /v1/balance). */
+            testPath?: string;
             /** @description Real API key. */
             apiKey: string;
             /** @default cb_ */
@@ -1574,7 +1637,7 @@ export interface components {
             region: string;
             /**
              * Format: uri
-             * @description https://, or http:// only for 127.0.0.1/localhost.
+             * @description https://, or http:// only for private addresses (10/8, 172.16/12, 192.168/16, 127/8, ::1, fc00::/7, localhost) (D11).
              */
             endpoint: string;
             /** @description Real access key ID. */
@@ -1635,7 +1698,10 @@ export interface components {
             tokenUrl: string;
             /** @description Real OAuth client secret. */
             clientSecret: string;
-            /** Format: uri */
+            /**
+             * Format: uri
+             * @description https://, or http:// only for private addresses (D11).
+             */
             upstreamUrl?: string;
             redirectHosts?: string[];
         };
@@ -1644,7 +1710,10 @@ export interface components {
         UpdateResourceBody: {
             /** @description Trimmed. */
             name?: string;
+            /** @description true closes every live tunnel to this service (J7). */
             disabled?: boolean;
+            /** @description Test the merged credential/config before storing; 422 SERVICE_TEST_FAILED on failure (D9). */
+            test?: boolean;
             /** @description Rotates the credential (database/SMTP kinds). */
             connectionUri?: string;
             /** @description Replaces the CA certificate; an empty string removes it. */
@@ -1664,13 +1733,20 @@ export interface components {
             keyId?: string;
             teamId?: string;
             region?: string;
-            /** Format: uri */
+            /**
+             * Format: uri
+             * @description https://, or http:// only for private addresses (10/8, 172.16/12, 192.168/16, 127/8, ::1, fc00::/7, localhost) (D11).
+             */
             endpoint?: string;
             /** Format: uri */
             tokenUrl?: string;
-            /** Format: uri */
+            /**
+             * Format: uri
+             * @description https://, or http:// only for private addresses (10/8, 172.16/12, 192.168/16, 127/8, ::1, fc00::/7, localhost) (D11).
+             */
             upstreamUrl?: string;
             authScheme?: components["schemas"]["AuthScheme"];
+            authHeader?: string;
             fakePrefix?: string;
             basePath?: string;
             redirectHosts?: string[];
@@ -1710,6 +1786,8 @@ export interface components {
             type: "plain";
             key: components["schemas"]["VariableKey"];
             value: string;
+            /** @description D8 link to a service in the same environment; removed with it. */
+            resourceId?: string;
             /** @default false */
             required: boolean;
         };
@@ -1863,6 +1941,26 @@ export interface components {
                  *         "code": "NOT_FOUND",
                  *         "message": "The requested resource was not found.",
                  *         "statusCode": 404,
+                 *         "correlationId": "c0ffee12-0000-4000-8000-000000000000"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorBody"];
+            };
+        };
+        /** @description SERVICE_TEST_FAILED — the connection test failed; nothing was saved (message is scrubbed of secrets) */
+        ServiceTestFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "success": false,
+                 *       "error": {
+                 *         "code": "SERVICE_TEST_FAILED",
+                 *         "message": "connect ECONNREFUSED 127.0.0.1:6379",
+                 *         "statusCode": 422,
                  *         "correlationId": "c0ffee12-0000-4000-8000-000000000000"
                  *       }
                  *     }
@@ -3672,6 +3770,46 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    createService: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+                /** @description Must be `1` on every mutating request authenticated with the session cookie (otherwise 403 CSRF_REQUIRED). Ignored for device bearer tokens. */
+                "x-cb-csrf": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                /** @description Environment id */
+                envId: components["parameters"]["envId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateServiceBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: components["schemas"]["ServiceCreated"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ServiceTestFailed"];
         };
     };
     listVariables: {
