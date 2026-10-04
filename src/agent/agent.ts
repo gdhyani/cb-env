@@ -12,7 +12,8 @@ import { pipeToTunnel, tunnelUrl } from "./tunnel";
 
 export interface AgentOptions {
   serverUrl: string;
-  token: string;
+  /** Current access token (refreshed as needed). */
+  getToken: () => Promise<string>;
   projectId: string;
   orgId?: string;
   environment: string;
@@ -23,7 +24,11 @@ export interface AgentOptions {
 }
 
 export async function fetchBootstrap(o: AgentOptions): Promise<Bootstrap> {
-  const client = createBackendClient({ serverUrl: o.serverUrl, token: o.token, correlationId: o.correlationId });
+  const client = createBackendClient({
+    serverUrl: o.serverUrl,
+    token: await o.getToken(),
+    correlationId: o.correlationId,
+  });
   const q = new URLSearchParams({ projectId: o.projectId, env: o.environment, ...(o.orgId ? { orgId: o.orgId } : {}) });
   try {
     return await client.get(`/api/agent/bootstrap?${q.toString()}`, BootstrapSchema);
@@ -109,7 +114,7 @@ export class Agent {
           s.once("close", () => {
             this.#tunnels -= 1;
           });
-          pipeToTunnel(s, url, { token: this.opts.token, onClose: onClose(label) });
+          void pipeToTunnel(s, url, { getToken: this.opts.getToken, onClose: onClose(label) });
         }),
       );
     }

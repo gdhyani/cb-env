@@ -88,6 +88,12 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
   const request = { server, projectId: config.projectId, orgId: config.orgId, environment };
 
   let { conn, snapshotFile, summary } = await attach(parentEnv, request);
+  // J7: while access is revoked or stopped, refuse to start (the preload would fail closed anyway).
+  if (summary.revoked) {
+    const reason = readSnapshotSync(snapshotFile).revokedReason ?? "access revoked";
+    conn.close();
+    throw new CbError("ACCESS_REVOKED", MSG.revoked(reason));
+  }
   note(
     `cb: ${config.projectSlug ?? config.projectId} / ${environment} — ${summary.listeners} brokered connection(s), ${summary.redirects} redirected host(s)`,
   );

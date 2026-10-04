@@ -51,7 +51,7 @@ describe("agent refresh (FR-AGT-006, J6)", () => {
     const serverUrl = await stubBackend(boot);
     const agent = new Agent({
       serverUrl,
-      token: "t",
+      getToken: async () => "t",
       projectId: "p",
       environment: "development",
       correlationId: "c",

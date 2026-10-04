@@ -59,8 +59,15 @@ export const CredentialsSchema = z.object({
   ),
 });
 export type Credentials = z.infer<typeof CredentialsSchema>;
-/** In memory the token is always resolved, whichever store holds it. */
-export type ServerCredentials = Omit<Credentials["servers"][string], "token" | "store"> & { token: string };
+/**
+ * In memory the secrets are always resolved, whichever store holds them. `token` is the refresh token
+ * (or a legacy device token from before rotation); the access token is short-lived (FR-AUTH-004).
+ */
+export type ServerCredentials = Omit<Credentials["servers"][string], "token" | "store"> & {
+  token: string;
+  accessToken?: string;
+  accessTokenExpiresAt?: string;
+};
 
 export const StateSchema = z.object({
   ports: z.record(z.string(), z.number().int()).default({}),

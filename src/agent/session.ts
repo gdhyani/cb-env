@@ -3,6 +3,7 @@ import { RESTART_DEBOUNCE_MS } from "../constants";
 import { type AgentMessage, type SessionSummary, writeLine } from "../shared/agent-ipc";
 import { newCorrelationId } from "../shared/correlation";
 import { requireServerCredentials } from "../shared/credentials";
+import { getAccessToken } from "../shared/token";
 import { Agent } from "./agent";
 import { type EventSubscription, subscribeAgentEvents } from "./events";
 
@@ -40,10 +41,11 @@ export class Session {
   async start(): Promise<void> {
     if (this.agent?.snapshot) return;
     // The device token is read here from the keychain/credential store; it never crosses the IPC socket.
-    const creds = await requireServerCredentials(this.key.server, this.#env);
+    await requireServerCredentials(this.key.server, this.#env);
+    const getToken = () => getAccessToken(this.key.server, this.#env);
     this.agent = new Agent({
       serverUrl: this.key.server,
-      token: creds.token,
+      getToken,
       projectId: this.key.projectId,
       orgId: this.key.orgId,
       environment: this.key.environment,
@@ -52,14 +54,14 @@ export class Session {
       log: (message) => this.broadcast({ type: "notice", message }),
     });
     await this.agent.start();
-    this.#subscribe(creds.token);
+    this.#subscribe(getToken);
   }
 
-  #subscribe(token: string) {
+  #subscribe(getToken: () => Promise<string>) {
     this.#events?.close();
     this.#events = subscribeAgentEvents({
       serverUrl: this.key.server,
-      token,
+      getToken,
       envId: this.agent?.bootstrap?.envId ?? "",
       correlationId: this.agent?.opts.correlationId ?? newCorrelationId(),
       onEvent: (event) => {

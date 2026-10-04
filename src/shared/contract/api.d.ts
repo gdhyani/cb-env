@@ -302,6 +302,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cli/token/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate CLI tokens (FR-AUTH-003)
+         * @description Exchanges a refresh token (or, once, a legacy cbd_ device token) for a new token pair. A refresh token that was already used signs the device out (REFRESH_TOKEN_REUSED) and closes its tunnels.
+         */
+        post: operations["refreshTokens"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cli/device/token": {
         parameters: {
             query?: never;
@@ -1111,12 +1131,16 @@ export interface components {
             /** @description Seconds until the code expires. */
             expiresIn: number;
         };
-        DeviceTokenResult: {
-            /**
-             * @description Device bearer token (prefix cbd_), returned exactly once.
-             * @example cbd_example
-             */
-            token: string;
+        /** @description FR-AUTH-002/003/004 — a 15-minute ES256 access token (claims sub, did, sid; keys at /.well-known/jwks.json) and a rotating refresh token. */
+        TokenPair: {
+            /** @description ES256 JWT used as the bearer for /api/cli/*, /api/agent/* and /tunnel. */
+            accessToken: string;
+            /** Format: date-time */
+            accessTokenExpiresAt: string;
+            /** @description Opaque (prefix cbr_); single use — presenting a used one signs the device out. */
+            refreshToken: string;
+        };
+        DeviceTokenResult: components["schemas"]["TokenPair"] & {
             device: {
                 id: components["schemas"]["ObjectId"];
                 name: string;
@@ -2447,6 +2471,39 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+        };
+    };
+    refreshTokens: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    refreshToken: string;
+                };
+            };
+        };
+        responses: {
+            /** @description New token pair */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: components["schemas"]["TokenPair"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     pollDeviceToken: {
