@@ -37,8 +37,9 @@ export function subscribeAgentEvents(opts: {
           const body = (await res.json().catch(() => undefined)) as
             | { error?: { code?: string; message?: string } }
             | undefined;
-          if (body?.error?.code === "NO_ACCESS" || body?.error?.code === "ENVIRONMENT_KILLED") {
-            opts.onEvent({ type: "access.revoked", reason: body.error.message ?? "access revoked" });
+          // Access refused at connect time: no grant, suspended environment or an active kill switch.
+          if (["NO_ACCESS", "ENVIRONMENT_KILLED", "KILLSWITCH_ACTIVE"].includes(body?.error?.code ?? "")) {
+            opts.onEvent({ type: "access.revoked", reason: body?.error?.message ?? "access revoked" });
             return;
           }
           throw new Error(`events stream HTTP ${res.status}`);
