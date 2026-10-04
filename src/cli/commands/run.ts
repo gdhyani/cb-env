@@ -175,6 +175,8 @@ export function registerRunCommand(program: Command): void {
     .argument("<cmd...>", "command to run, after --")
     .passThroughOptions()
     .action(async (cmd: string[], opts: { env?: string; server?: string; restart: boolean }) => {
-      process.exitCode = await runCommand(cmd, opts);
+      const code = await runCommand(cmd, opts);
+      // Mirror the child's exit immediately; lingering keep-alive or stream handles must not keep cb alive.
+      process.exit(code);
     });
 }
