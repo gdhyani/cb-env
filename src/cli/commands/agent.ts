@@ -78,7 +78,7 @@ export function registerUpDownCommands(program: Command): void {
         );
         conn.send({
           type: "attach",
-          server: resolveServer(config.server),
+          server: resolveServer(undefined, config.server),
           projectId: config.projectId,
           orgId: config.orgId,
           environment,

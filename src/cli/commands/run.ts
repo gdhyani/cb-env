@@ -79,7 +79,7 @@ async function attach(
 export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<number> {
   const parentEnv = opts.processEnv ?? process.env;
   const { config } = requireProjectConfig(opts.cwd);
-  const server = resolveServer(opts.server ?? config.server);
+  const server = resolveServer(opts.server, config.server);
   // Fail fast when logged out; the daemon reads the token itself and it never crosses IPC.
   await requireServerCredentials(server, parentEnv);
   const environment = await resolveEnvironmentName(config.projectId, opts.env, config.defaultEnvironment, parentEnv);

@@ -47,7 +47,7 @@ export function registerTypesCommand(program: Command): void {
     .option("--json", "print the variable names as JSON instead of writing the file")
     .action(async (opts: { env?: string; json?: boolean }) => {
       const { config, root } = requireProjectConfig();
-      const server = resolveServer(config.server);
+      const server = resolveServer(undefined, config.server);
       await requireServerCredentials(server);
       const environment = await resolveEnvironmentName(
         config.projectId,
