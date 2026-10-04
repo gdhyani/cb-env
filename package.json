@@ -16,7 +16,8 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check ."
+    "lint": "biome check .",
+    "sync:contract": "node scripts/sync-contract.mjs"
   },
   "dependencies": {
     "@clack/prompts": "^1.8.1",
