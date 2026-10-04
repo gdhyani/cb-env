@@ -41,8 +41,9 @@ cb-env/
 │  │  ├─ commands/          # login, logout, whoami, init, run, shell, env, status, doctor, types, up, down
 │  │  └─ errors.ts          # error catalog (PRD Appendix B): cause, effect, next step
 │  ├─ agent/                # detached daemon
-│  │  ├─ main.ts            # entry, single-instance lock, idle exit (FR-AGT-001/007)
-│  │  ├─ ipc-server.ts      # Unix socket / Windows named pipe control API
+│  │  ├─ main.ts            # entry: control socket (Unix socket / named pipe), single instance, idle exit, log (FR-AGT-001/007/008)
+│  │  ├─ session.ts         # one project environment: agent + SSE + refresh, notifies attached `cb run` clients (FR-AGT-006)
+│  │  ├─ agent.ts           # listeners, tunnels and snapshot for one environment (FR-AGT-003)
 │  │  ├─ listeners.ts       # Layer 1 + Layer 2 127.0.0.1 listeners, stable ports (FR-AGT-003/004/005)
 │  │  ├─ tunnel.ts          # one WSS per TCP conn, backpressure, close-code handling (§12.2)
 │  │  ├─ events.ts          # SSE subscription + backoff (FR-AGT-006)
@@ -57,7 +58,7 @@ cb-env/
 │  │  └─ browser-stub.ts    # throws "@cb/env is server-only" (FR-API-003)
 │  └─ shared/
 │     ├─ paths.ts           # per-OS paths (PRD §9.6)
-│     ├─ ipc-client.ts      # CLI ↔ agent
+│     ├─ agent-ipc.ts       # CLI ↔ agent: zod message schemas, line framing, connect / ensure (spawn) the daemon
 │     ├─ keychain.ts        # @napi-rs/keyring + ~/.cb/credentials 0600 fallback
 │     ├─ http.ts            # backend client: parses the PRD §12.7 envelope, maps error shape → CbError, sends x-correlation-id
 │     ├─ redact.ts          # shared redaction helper (S9)

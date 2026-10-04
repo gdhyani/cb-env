@@ -9,6 +9,11 @@ export const AGENT_VERSION = "0.0.0";
 export const PROJECT_DIR = ".cb";
 export const PROJECT_FILE = "project.json";
 export const RESTART_DEBOUNCE_MS = 1_000;
+/** FR-AGT-007: the daemon exits after this long with no clients and no tunnels. */
+export const AGENT_IDLE_MS = 8 * 60 * 60 * 1000;
+/** FR-AGT-007: `cb run` checks the daemon this often and respawns it if missing. */
+export const AGENT_HEALTH_MS = 5_000;
+export const AGENT_START_TIMEOUT_MS = 8_000;
 
 export const ENV = {
   home: "CB_HOME",
@@ -19,6 +24,8 @@ export const ENV = {
   environment: "CB_ENVIRONMENT",
   /** "file" forces ~/.cb/credentials.json instead of the OS keychain (CI, tests). */
   credentialStore: "CB_CREDENTIAL_STORE",
+  /** Overrides AGENT_IDLE_MS (tests). */
+  agentIdleMs: "CB_AGENT_IDLE_MS",
 } as const;
 
 // PRD Appendix B — cause, effect, next step.

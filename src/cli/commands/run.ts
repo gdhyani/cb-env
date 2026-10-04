@@ -3,11 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import type { Command } from "commander";
 import spawn from "cross-spawn";
-import { Agent } from "../../agent/agent";
-import { subscribeAgentEvents } from "../../agent/events";
-import { ENV, MSG, RESTART_DEBOUNCE_MS } from "../../constants";
-import { newCorrelationId } from "../../shared/correlation";
+import { AGENT_HEALTH_MS, ENV, MSG } from "../../constants";
+import { readSnapshotSync } from "../../register/snapshot";
+import { type AgentConnection, ensureAgent, type SessionSummary } from "../../shared/agent-ipc";
 import { requireServerCredentials } from "../../shared/credentials";
+import { CbError } from "../../shared/errors";
 import { requireProjectConfig } from "../../shared/project-config";
 import type { Snapshot } from "../../shared/schemas";
 import { loadState } from "../../shared/state";
@@ -48,7 +48,6 @@ export interface RunOptions {
   restart?: boolean;
   cwd?: string;
   processEnv?: NodeJS.ProcessEnv;
-  portRange?: { min: number; max: number };
 }
 
 export async function resolveEnvironmentName(
@@ -62,72 +61,77 @@ export async function resolveEnvironmentName(
   return state.environments[projectId] ?? fallback;
 }
 
+/** Connects to the daemon (starting it if needed) and attaches this project environment. */
+async function attach(
+  env: NodeJS.ProcessEnv,
+  request: { server: string; projectId: string; orgId?: string; environment: string },
+): Promise<{ conn: AgentConnection; snapshotFile: string; summary: SessionSummary }> {
+  const conn = await ensureAgent(env);
+  conn.send({ type: "attach", ...request });
+  const reply = await conn.next("attached");
+  if (reply.type === "error") {
+    conn.close();
+    throw new CbError(reply.code, reply.message);
+  }
+  return { conn, snapshotFile: reply.snapshotFile, summary: reply.session };
+}
+
 export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<number> {
   const parentEnv = opts.processEnv ?? process.env;
   const { config } = requireProjectConfig(opts.cwd);
   const server = resolveServer(opts.server ?? config.server);
-  const creds = await requireServerCredentials(server, parentEnv);
+  // Fail fast when logged out; the daemon reads the token itself and it never crosses IPC.
+  await requireServerCredentials(server, parentEnv);
   const environment = await resolveEnvironmentName(config.projectId, opts.env, config.defaultEnvironment, parentEnv);
   const [file, ...args] = cmd;
   if (!file) throw new Error("cb run: missing command. Usage: cb run -- <command>");
+  const request = { server, projectId: config.projectId, orgId: config.orgId, environment };
 
-  const agent = new Agent({
-    serverUrl: server,
-    token: creds.token,
-    projectId: config.projectId,
-    orgId: config.orgId,
-    environment,
-    correlationId: newCorrelationId(),
-    env: parentEnv,
-    portRange: opts.portRange,
-    log: note,
-  });
-  await agent.start();
+  let { conn, snapshotFile, summary } = await attach(parentEnv, request);
   note(
-    `cb: ${config.projectSlug ?? config.projectId} / ${environment} — ${agent.bootstrap?.listeners.length ?? 0} brokered connection(s), ${agent.bootstrap?.redirects.length ?? 0} redirected host(s)`,
+    `cb: ${config.projectSlug ?? config.projectId} / ${environment} — ${summary.listeners} brokered connection(s), ${summary.redirects} redirected host(s)`,
   );
 
   let child: ChildProcess | undefined;
   let restartRequested = false;
-  let timer: NodeJS.Timeout | undefined;
   let revoked = false;
+  let finished = false;
 
-  const scheduleRefresh = () => {
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      const wasRevoked = revoked;
-      try {
-        const before = JSON.stringify(agent.snapshot?.env);
-        await agent.start();
-        revoked = false;
-        if (wasRevoked) note("cb: access restored — reconnecting your app");
-        else if (JSON.stringify(agent.snapshot?.env) === before) return;
-        else note("cb: configuration changed — restarting your app");
-        if (opts.restart === false) return;
-        restartRequested = true;
-        child?.kill("SIGTERM");
-      } catch (err) {
-        // Still revoked (or backend unreachable): stay revoked; the next event retries.
-        if (!wasRevoked)
-          note(`cb: could not refresh configuration — ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }, RESTART_DEBOUNCE_MS);
+  const restart = (message: string) => {
+    note(message);
+    if (opts.restart === false) return;
+    restartRequested = true;
+    child?.kill("SIGTERM");
   };
-
-  const events = subscribeAgentEvents({
-    serverUrl: server,
-    token: creds.token,
-    envId: agent.bootstrap?.envId ?? "",
-    correlationId: agent.opts.correlationId,
-    onEvent: (event) => {
-      if (event.type === "config.changed") scheduleRefresh();
-      if (event.type === "access.revoked" && !revoked) {
+  // FR-PKG-005: the daemon refreshes the snapshot; this process restarts the app and prints banners.
+  const listen = (c: AgentConnection) =>
+    c.onMessage((m) => {
+      if (m.type === "config.changed") restart("cb: configuration changed — restarting your app");
+      else if (m.type === "access.restored" && revoked) {
+        revoked = false;
+        restart("cb: access restored — reconnecting your app");
+      } else if (m.type === "access.revoked" && !revoked) {
         revoked = true;
-        note(`\n${"!".repeat(72)}\n${MSG.revoked(event.reason)}\n${"!".repeat(72)}\n`);
-        void agent.revoke(event.reason);
-      }
-    },
-  });
+        note(`\n${"!".repeat(72)}\n${MSG.revoked(m.reason)}\n${"!".repeat(72)}\n`);
+      } else if (m.type === "notice") note(m.message);
+    });
+  listen(conn);
+
+  // FR-AGT-007: check the daemon every few seconds and respawn it (same ports, from state.json) if it is gone.
+  let reconnecting = false;
+  const health = setInterval(async () => {
+    if (finished || reconnecting || !conn.socket.destroyed) return;
+    reconnecting = true;
+    try {
+      ({ conn, snapshotFile } = await attach(parentEnv, request));
+      listen(conn);
+      note("cb: background agent restarted");
+    } catch (err) {
+      note(`cb: background agent unavailable — ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      reconnecting = false;
+    }
+  }, AGENT_HEALTH_MS);
 
   const onSigint = () => undefined; // the terminal delivers Ctrl+C to the child directly
   const forward = (signal: NodeJS.Signals) => () => child?.kill(signal);
@@ -139,11 +143,11 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
 
   try {
     for (;;) {
-      if (!agent.snapshot) throw new Error("cb run: no snapshot");
+      const snapshot = readSnapshotSync(snapshotFile);
       child = spawn(file, args, {
         stdio: "inherit",
         cwd: opts.cwd,
-        env: buildChildEnv(parentEnv, agent.snapshot, agent.snapshotFile),
+        env: buildChildEnv(parentEnv, snapshot, snapshotFile),
       });
       const code = await new Promise<number>((resolve, reject) => {
         child?.on("error", reject);
@@ -156,12 +160,12 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
       return code;
     }
   } finally {
-    clearTimeout(timer);
-    events.close();
+    finished = true;
+    clearInterval(health);
+    conn.close();
     process.off("SIGINT", onSigint);
     process.off("SIGTERM", onSigterm);
     process.off("SIGHUP", onSighup);
-    await agent.stop();
   }
 }
 
