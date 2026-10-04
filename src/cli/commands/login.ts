@@ -15,7 +15,9 @@ const StartSchema = z.object({
   expiresIn: z.number(),
 });
 const TokenSchema = z.object({
-  token: z.string(),
+  accessToken: z.string(),
+  accessTokenExpiresAt: z.string(),
+  refreshToken: z.string(),
   device: z.object({ id: z.string(), name: z.string() }),
   user: z.object({ id: z.string(), name: z.string(), email: z.string() }),
 });
@@ -39,7 +41,9 @@ export async function login(opts: { server?: string; browser?: boolean; pollInte
     try {
       const result = await client.post("/api/cli/device/token", { deviceCode: start.deviceCode }, TokenSchema);
       const store = await saveServerCredentials(server, {
-        token: result.token,
+        token: result.refreshToken,
+        accessToken: result.accessToken,
+        accessTokenExpiresAt: result.accessTokenExpiresAt,
         deviceId: result.device.id,
         deviceName: result.device.name,
         user: result.user,

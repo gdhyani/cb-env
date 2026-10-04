@@ -5,6 +5,7 @@ import { newCorrelationId } from "../../shared/correlation";
 import { requireServerCredentials } from "../../shared/credentials";
 import { requireProjectConfig } from "../../shared/project-config";
 import { loadState, saveState } from "../../shared/state";
+import { getAccessToken } from "../../shared/token";
 import { out, resolveServer } from "../context";
 import { resolveEnvironmentName } from "./run";
 
@@ -19,7 +20,7 @@ export function registerEnvCommands(program: Command): void {
     .action(async (opts: { env?: string; json?: boolean }) => {
       const { config } = requireProjectConfig();
       const server = resolveServer(config.server);
-      const creds = await requireServerCredentials(server);
+      await requireServerCredentials(server);
       const environment = await resolveEnvironmentName(
         config.projectId,
         opts.env,
@@ -28,7 +29,7 @@ export function registerEnvCommands(program: Command): void {
       );
       const b = await fetchBootstrap({
         serverUrl: server,
-        token: creds.token,
+        getToken: () => getAccessToken(server),
         projectId: config.projectId,
         orgId: config.orgId,
         environment,

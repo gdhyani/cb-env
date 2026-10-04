@@ -6,6 +6,7 @@ import { requireServerCredentials } from "../../shared/credentials";
 import { CbError } from "../../shared/errors";
 import { createBackendClient } from "../../shared/http";
 import { writeProjectConfig } from "../../shared/project-config";
+import { getAccessToken } from "../../shared/token";
 import { out, resolveServer } from "../context";
 
 const OrgSchema = z.object({ id: z.string(), name: z.string(), role: z.string() });
@@ -86,8 +87,8 @@ export async function init(opts: {
 }): Promise<void> {
   const root = opts.cwd ?? process.cwd();
   const server = resolveServer(opts.server);
-  const creds = await requireServerCredentials(server);
-  const client = createBackendClient({ serverUrl: server, token: creds.token });
+  await requireServerCredentials(server);
+  const client = createBackendClient({ serverUrl: server, token: await getAccessToken(server) });
   const interactive = Boolean(process.stdin.isTTY) && !opts.yes;
 
   const orgs = await client.get("/api/orgs", z.array(OrgSchema));

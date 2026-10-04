@@ -88,7 +88,14 @@ async function setup(idleMs = 60_000) {
   const env = { ...process.env, CB_HOME: home, CB_CREDENTIAL_STORE: "file", CB_AGENT_IDLE_MS: String(idleMs) };
   await saveServerCredentials(
     backend.url,
-    { token: TOKEN, deviceId: "d1", deviceName: "test", user: { id: "u", name: "U", email: "u@x" } },
+    {
+      token: "cbr_refresh_token_for_daemon_test_000000",
+      accessToken: TOKEN,
+      accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      deviceId: "d1",
+      deviceName: "test",
+      user: { id: "u", name: "U", email: "u@x" },
+    },
     env,
   );
   cleanups.push(async () => {

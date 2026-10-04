@@ -9,6 +9,7 @@ import { CbError } from "../shared/errors";
 import { createBackendClient } from "../shared/http";
 import { agentLogPath, agentSocketPath } from "../shared/paths";
 import { redact } from "../shared/redact";
+import { getAccessToken } from "../shared/token";
 import { Session, sessionId } from "./session";
 
 const env = process.env;
@@ -139,13 +140,12 @@ async function heartbeat() {
     if (s.agent?.snapshot) byServer.set(s.key.server, (byServer.get(s.key.server) ?? 0) + s.agent.tunnels);
   for (const [server, activeTunnels] of byServer) {
     try {
-      const creds = await getServerCredentials(server, env);
-      if (!creds) continue;
-      await createBackendClient({ serverUrl: server, token: creds.token, correlationId: newCorrelationId() }).post(
-        "/api/agent/heartbeat",
-        { version: AGENT_VERSION, activeTunnels },
-        z.unknown(),
-      );
+      if (!(await getServerCredentials(server, env))) continue;
+      await createBackendClient({
+        serverUrl: server,
+        token: await getAccessToken(server, env),
+        correlationId: newCorrelationId(),
+      }).post("/api/agent/heartbeat", { version: AGENT_VERSION, activeTunnels }, z.unknown());
     } catch (err) {
       log(`heartbeat to ${server} failed: ${err instanceof Error ? err.message : String(err)}`);
     }

@@ -10,14 +10,24 @@ export function tunnelUrl(serverUrl: string, params: Record<string, string>): st
 }
 
 export interface TunnelOptions {
-  token: string;
+  /** A current access token, fetched per connection (tokens are short-lived, FR-AUTH-004). */
+  getToken: () => Promise<string>;
   onClose?: (code: number, reason: string) => void;
 }
 
 /** Thin agent (L4): one authenticated WebSocket per TCP connection, raw bytes both ways, no protocol logic. */
-export function pipeToTunnel(socket: net.Socket, url: string, opts: TunnelOptions): void {
+export async function pipeToTunnel(socket: net.Socket, url: string, opts: TunnelOptions): Promise<void> {
+  // The app's first bytes wait in the (not yet piped) socket while the token is fetched.
+  let token: string;
+  try {
+    token = await opts.getToken();
+  } catch (err) {
+    opts.onClose?.(4401, err instanceof Error ? err.message : "not logged in");
+    socket.destroy();
+    return;
+  }
   const ws = new WebSocket(url, {
-    headers: { authorization: `Bearer ${opts.token}`, "x-cb-agent-version": AGENT_VERSION },
+    headers: { authorization: `Bearer ${token}`, "x-cb-agent-version": AGENT_VERSION },
     perMessageDeflate: false,
   });
   const stream = createWebSocketStream(ws);

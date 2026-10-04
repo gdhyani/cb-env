@@ -4,6 +4,7 @@ import { getServerCredentials, removeServerCredentials, requireServerCredentials
 import { CbError } from "../../shared/errors";
 import { createBackendClient } from "../../shared/http";
 import { findProjectConfig } from "../../shared/project-config";
+import { getAccessToken } from "../../shared/token";
 import { out, resolveServer } from "../context";
 
 const WhoamiSchema = z.object({
@@ -21,7 +22,7 @@ export function registerAccountCommands(program: Command): void {
     .action(async (opts: { server?: string; json?: boolean }) => {
       const server = resolveServer(opts.server);
       const creds = await requireServerCredentials(server);
-      const me = await createBackendClient({ serverUrl: server, token: creds.token }).get(
+      const me = await createBackendClient({ serverUrl: server, token: await getAccessToken(server) }).get(
         "/api/cli/whoami",
         WhoamiSchema,
       );
@@ -50,7 +51,11 @@ export function registerAccountCommands(program: Command): void {
         return;
       }
       try {
-        await createBackendClient({ serverUrl: server, token: creds.token }).post("/api/cli/logout", {}, z.unknown());
+        await createBackendClient({ serverUrl: server, token: await getAccessToken(server) }).post(
+          "/api/cli/logout",
+          {},
+          z.unknown(),
+        );
       } catch (err) {
         // A token that is already revoked still gets removed locally.
         if (!(err instanceof CbError) || err.code !== "UNAUTHORIZED") throw err;

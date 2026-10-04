@@ -9,7 +9,8 @@ export interface EventSubscription {
 /** FR-AGT-006: SSE subscription with exponential backoff reconnects. */
 export function subscribeAgentEvents(opts: {
   serverUrl: string;
-  token: string;
+  /** Fetched on every (re)connect: access tokens are short-lived. */
+  getToken: () => Promise<string>;
   envId: string;
   correlationId: string;
   onEvent: (event: AgentEvent) => void;
@@ -25,9 +26,10 @@ export function subscribeAgentEvents(opts: {
       try {
         const url = new URL("/api/agent/events", opts.serverUrl);
         url.searchParams.set("envId", opts.envId);
+        const token = await opts.getToken();
         const res = await fetch(url, {
           headers: {
-            authorization: `Bearer ${opts.token}`,
+            authorization: `Bearer ${token}`,
             accept: "text/event-stream",
             [CORRELATION_HEADER]: opts.correlationId,
           },
