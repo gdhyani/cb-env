@@ -7,6 +7,8 @@ const v8 = require("node:v8");
 
 const dir = process.env.CB_E2E_EVIDENCE_DIR;
 if (dir) {
+  // V8 truncates strings in heap snapshots at 1024 chars by default: a secret deep in a large body would be missed.
+  v8.setFlagsFromString("--heap-snapshot-string-limit=268435456");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `hooked.${process.pid}`), process.argv.slice(1).join(" "));
   const request = path.join(dir, "dump.request");

@@ -33,6 +33,13 @@ export function loadHarnessConfig(env: NodeJS.ProcessEnv = process.env): Harness
   };
 }
 
-/** The e2e suites need the compose services; without their passwords they are skipped (unit CI). */
-export const servicesAvailable = (env: NodeJS.ProcessEnv = process.env) =>
-  Boolean(env.CB_TEST_DB_PASSWORD && env.CB_TEST_REDIS_PASSWORD);
+/**
+ * The e2e suites need the compose services; locally, without their passwords they are skipped. CI sets
+ * CB_E2E_REQUIRED=1 so a missing password fails the run instead of a green job that ran nothing (§13).
+ */
+export function servicesAvailable(env: NodeJS.ProcessEnv = process.env): boolean {
+  const ok = Boolean(env.CB_TEST_DB_PASSWORD && env.CB_TEST_REDIS_PASSWORD);
+  if (!ok && env.CB_E2E_REQUIRED === "1")
+    throw new Error("CB_E2E_REQUIRED=1 but CB_TEST_DB_PASSWORD / CB_TEST_REDIS_PASSWORD are not set");
+  return ok;
+}

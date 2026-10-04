@@ -55,6 +55,7 @@ describe.skipIf(!servicesAvailable())("examples/nest-mysql under cb run (ยง15, ย
       env: cbEnvFor(suite.cbHome, suite.evidence),
       evidenceDir: suite.evidence,
       logFile: path.join(suite.evidence, "cli.log"),
+      appEntry: /dist[\\/]main\.js/,
     });
   });
 

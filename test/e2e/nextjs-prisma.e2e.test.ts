@@ -110,6 +110,9 @@ describe.skipIf(!servicesAvailable())(`T3 examples/nextjs-prisma under cb run (N
           evidenceDir: suite.evidence,
           logFile,
           readyMs: 180_000,
+          // The Next server process (dev server worker or `next start`), not just cb's own processes.
+          appEntry:
+            /next[\\/]dist[\\/]server[\\/]|\.bin[\\/]next (dev|start)|next[\\/]dist[\\/]bin[\\/]next (dev|start)/,
         });
       });
 
@@ -182,7 +185,10 @@ describe("T3 browser stub (FR-API-003)", () => {
         env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
       });
       expect(r.status).not.toBe(0);
-      expect(`${r.stdout}${r.stderr}`).toMatch(/server-only/);
+      // Next's own static detection, not cb's runtime message ("@cb/env is server-only").
+      expect(`${r.stdout}${r.stderr}`).toMatch(
+        /'server-only' cannot be imported from a Client Component|needs "server-only"|"server-only" cannot be imported/,
+      );
     } finally {
       fs.rmSync(bad, { recursive: true, force: true });
       fs.rmSync(path.join(dir, ".next"), { recursive: true, force: true });

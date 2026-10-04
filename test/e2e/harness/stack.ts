@@ -28,6 +28,8 @@ const waitForText = async (file: string, text: string, ms: number, proc: ChildPr
 /** The real cb backend from source, with fresh keys and debug logging (the strictest S9 check), logs captured. */
 export async function startBackend(cfg: HarnessConfig, opts: { mongoUri: string; caFile: string; logFile: string }) {
   const port = await freePort();
+  // The backend's own keys: SERVER_SECRET derives every device's fakes, so they are canaries too.
+  const keys = [randomBytes(32).toString("base64"), randomBytes(32).toString("base64")] as const;
   const log = fs.openSync(opts.logFile, "a");
   const proc = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
     cwd: cfg.backendDir,
@@ -39,8 +41,8 @@ export async function startBackend(cfg: HarnessConfig, opts: { mongoUri: string;
       PORT: String(port),
       LOG_LEVEL: "debug",
       MONGODB_URI: opts.mongoUri,
-      MASTER_KEY: randomBytes(32).toString("base64"),
-      SERVER_SECRET: randomBytes(32).toString("base64"),
+      MASTER_KEY: keys[0],
+      SERVER_SECRET: keys[1],
       DASHBOARD_URL: `http://127.0.0.1:${port}`,
       UPSTREAM_EXTRA_CA_FILE: opts.caFile,
     },
@@ -49,6 +51,7 @@ export async function startBackend(cfg: HarnessConfig, opts: { mongoUri: string;
   await waitForText(opts.logFile, "ready on :", 60_000, proc);
   return {
     url: `http://127.0.0.1:${port}`,
+    keys: [...keys],
     stop: async () => {
       if (proc.exitCode !== null) return;
       const exited = new Promise<void>((r) => proc.once("exit", () => r()));

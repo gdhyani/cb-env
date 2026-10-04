@@ -81,6 +81,8 @@ function onClient(socket: net.Socket) {
           });
           return;
         }
+        // Default snapshots truncate strings at 1024 chars; the canary scan must see whole strings.
+        v8.setFlagsFromString("--heap-snapshot-string-limit=268435456");
         writeLine(socket, { type: "heap-snapshot", file: v8.writeHeapSnapshot(req.file) });
         return;
       }

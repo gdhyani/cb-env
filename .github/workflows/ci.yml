@@ -80,6 +80,8 @@ jobs:
         working-directory: cb-env
         env:
           CB_E2E_BACKEND_DIR: ${{ github.workspace }}/cb-backend
+          # Missing service passwords must fail the job, never skip the suite.
+          CB_E2E_REQUIRED: "1"
           NEXT_TELEMETRY_DISABLED: "1"
         # The non-Next examples do not depend on the Next version: run them once.
         run: |

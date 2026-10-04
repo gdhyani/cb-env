@@ -120,6 +120,7 @@ describe.skipIf(!servicesAvailable())("examples/express-mongo under cb run (§15
       env: cbEnvFor(suite.cbHome, suite.evidence),
       evidenceDir: suite.evidence,
       logFile: path.join(suite.evidence, "cli.log"),
+      appEntry: /src[\\/]server\.js/,
     });
   });
 
@@ -133,6 +134,8 @@ describe.skipIf(!servicesAvailable())("examples/express-mongo under cb run (§15
     const body = await res.json();
     suite.saveResponse(route.slice(1), { headers: Object.fromEntries(res.headers), body });
     expect(body, JSON.stringify(body)).toMatchObject({ ok: true });
+    // APNs reports per-device results instead of throwing: a failed send must not look like success.
+    if (route === "/apns") expect(body.result).toEqual({ sent: 1, failed: 0 });
   });
 
   it("FR-GW-006 a provider echoing the real key is redacted before the app sees it", async () => {

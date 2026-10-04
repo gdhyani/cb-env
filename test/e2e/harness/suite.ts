@@ -3,6 +3,7 @@ import path from "node:path";
 import { type Canaries, makeCanaries, secretsOf } from "./canaries";
 import { testTls } from "./certs";
 import { type HarnessConfig, loadHarnessConfig } from "./config";
+import { hookedProcesses } from "./evidence";
 import { type MockUpstreams, startMockUpstreams } from "./mock-upstreams";
 import { listFiles, type ScanReport, scanEvidence } from "./scan";
 import { linkProject, loginCli, type Seeded, type SeedSpec, seedProject } from "./seed";
@@ -79,9 +80,15 @@ export async function startSuite(name: string, opts: { mongo?: boolean } = {}): 
           .readdirSync(evidence)
           .filter((f) => re.test(f))
           .map((f) => path.join(evidence, f));
-      return scanEvidence(secretsOf(canaries, [cfg.servicesPassword, cfg.redisPassword]), {
-        "app process.env": inEvidence(/^process-env\.\d+\.json$/),
-        "app heap snapshots": inEvidence(/^app\.\d+\.heapsnapshot$/),
+      const role = new Map(hookedProcesses(evidence).map((p) => [p.pid, p.role]));
+      const byRole = (re: RegExp, want: "app" | "cb") =>
+        inEvidence(re).filter((f) => role.get(Number(path.basename(f).split(".")[1])) === want);
+      const secrets = secretsOf(canaries, [cfg.servicesPassword, cfg.redisPassword, ...backend.keys]);
+      return scanEvidence(secrets, {
+        "app process.env": byRole(/^process-env\.\d+\.json$/, "app"),
+        "app heap snapshots": byRole(/^app\.\d+\.heapsnapshot$/, "app"),
+        "cb CLI/agent process.env": byRole(/^process-env\.\d+\.json$/, "cb"),
+        "cb CLI/agent heap snapshots": byRole(/^app\.\d+\.heapsnapshot$/, "cb"),
         "agent heap snapshot": inEvidence(/^agent(\..+)?\.heapsnapshot$/),
         "CB_HOME (incl. agent log)": listFiles(cbHome),
         "backend log": [path.join(evidence, "backend.log")],

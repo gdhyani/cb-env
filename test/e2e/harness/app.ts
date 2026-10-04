@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { HarnessConfig } from "./config";
+import { hookedProcesses } from "./evidence";
 
 const alive = (pid: number) => {
   try {
@@ -67,6 +68,8 @@ export async function runExample(
     evidenceDir: string;
     logFile: string;
     readyMs?: number;
+    /** argv of the app's own server process: the canary scan is meaningless unless it was hooked. */
+    appEntry: RegExp;
   },
 ): Promise<RunningApp> {
   const log = fs.openSync(opts.logFile, "a");
@@ -112,7 +115,12 @@ export async function runExample(
           .map((f) => Number(f.split(".")[1]))
           .filter(alive);
         const pending = pids.filter((pid) => !fs.existsSync(path.join(opts.evidenceDir, `dump.${pid}.${stamp}`)));
-        if (pids.length > 0 && pending.length === 0) return pids.map(String);
+        if (pids.length > 0 && pending.length === 0) {
+          const app = hookedProcesses(opts.evidenceDir).find((p) => pids.includes(p.pid) && opts.appEntry.test(p.argv));
+          if (!app)
+            throw new Error(`the app process (${opts.appEntry}) was not hooked: its env and heap would go unscanned`);
+          return pids.map(String);
+        }
         if (Date.now() > end) throw new Error(`no evidence from pids ${pending.join(", ") || "(none hooked)"}`);
         await new Promise((r) => setTimeout(r, 300));
       }
