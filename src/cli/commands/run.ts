@@ -93,18 +93,23 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
   let revoked = false;
 
   const scheduleRefresh = () => {
-    if (revoked) return;
     clearTimeout(timer);
     timer = setTimeout(async () => {
+      const wasRevoked = revoked;
       try {
         const before = JSON.stringify(agent.snapshot?.env);
         await agent.start();
-        if (JSON.stringify(agent.snapshot?.env) === before || opts.restart === false) return;
-        note("cb: configuration changed — restarting your app");
+        revoked = false;
+        if (wasRevoked) note("cb: access restored — reconnecting your app");
+        else if (JSON.stringify(agent.snapshot?.env) === before) return;
+        else note("cb: configuration changed — restarting your app");
+        if (opts.restart === false) return;
         restartRequested = true;
         child?.kill("SIGTERM");
       } catch (err) {
-        note(`cb: could not refresh configuration — ${err instanceof Error ? err.message : String(err)}`);
+        // Still revoked (or backend unreachable): stay revoked; the next event retries.
+        if (!wasRevoked)
+          note(`cb: could not refresh configuration — ${err instanceof Error ? err.message : String(err)}`);
       }
     }, RESTART_DEBOUNCE_MS);
   };

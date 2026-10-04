@@ -51,6 +51,13 @@ export function createBackendClient(opts: BackendClientOptions): BackendClient {
     const error = ApiErrorBodySchema.safeParse(body);
     if (error.success) {
       const e = error.data.error;
+      // A rejected device token means this machine must log in again (expired, revoked or logged out).
+      if (e.code === "UNAUTHORIZED" && opts.token) {
+        throw new CbError("NOT_LOGGED_IN", MSG.notLoggedIn, {
+          statusCode: e.statusCode,
+          correlationId: e.correlationId,
+        });
+      }
       throw new CbError(e.code, e.message, { statusCode: e.statusCode, correlationId: e.correlationId });
     }
     return { status: res.status, body };

@@ -1,4 +1,3 @@
-import type net from "node:net";
 import { MSG } from "../constants";
 import { CbError } from "../shared/errors";
 import { writeJsonAtomic } from "../shared/files";
@@ -6,7 +5,7 @@ import { createBackendClient } from "../shared/http";
 import { snapshotPath } from "../shared/paths";
 import { type Bootstrap, BootstrapSchema, type Snapshot } from "../shared/schemas";
 import { loadState, saveState } from "../shared/state";
-import { closeServer, listenLocal } from "./listeners";
+import { type LocalListener, listenLocal } from "./listeners";
 import { allocatePorts } from "./ports";
 import { listenerKey, redirectKey, renderSnapshot } from "./snapshot";
 import { pipeToTunnel, tunnelUrl } from "./tunnel";
@@ -29,7 +28,6 @@ export async function fetchBootstrap(o: AgentOptions): Promise<Bootstrap> {
   try {
     return await client.get(`/api/agent/bootstrap?${q.toString()}`, BootstrapSchema);
   } catch (err) {
-    if (err instanceof CbError && err.code === "UNAUTHORIZED") throw new CbError("NOT_LOGGED_IN", MSG.notLoggedIn);
     if (err instanceof CbError && err.code === "NO_ACCESS")
       throw new CbError("NO_ACCESS", MSG.noAccess(o.environment), { correlationId: err.correlationId });
     throw err;
@@ -42,32 +40,50 @@ export class Agent {
   snapshot: Snapshot | undefined;
   bootstrap: Bootstrap | undefined;
   readonly snapshotFile: string;
-  #servers: net.Server[] = [];
+  /** Listeners by key ("l1:<resource>" / "l2:<host>:<port>"), reused across refreshes. */
+  #listeners = new Map<string, LocalListener>();
 
   constructor(opts: AgentOptions) {
     this.opts = opts;
     this.snapshotFile = snapshotPath(opts.projectId, opts.environment, opts.env ?? process.env);
   }
 
-  /** Bootstrap (or refresh): allocate stable ports, (re)open listeners, write the snapshot. */
+  /** Bootstrap (or refresh): allocate stable ports, reconcile listeners, write the snapshot. */
   async start(): Promise<Snapshot> {
     const b = await fetchBootstrap(this.opts);
     const env = this.opts.env ?? process.env;
     const scope = `${b.projectId}/${b.environment}/`;
-    const keys = [
-      ...b.listeners.map((l) => listenerKey(l.resourceId)),
-      ...b.redirects.map((r) => redirectKey(r.host, r.port)),
-    ];
-    await this.closeListeners();
+    const wanted = new Map<string, { url: string; label: string }>();
+    for (const l of b.listeners) {
+      wanted.set(listenerKey(l.resourceId), {
+        url: tunnelUrl(this.opts.serverUrl, { layer: "1", env: b.envId, resource: l.resourceId }),
+        label: `${l.kind} "${l.name}"`,
+      });
+    }
+    for (const r of b.redirects) {
+      wanted.set(redirectKey(r.host, r.port), {
+        url: tunnelUrl(this.opts.serverUrl, { layer: "2", env: b.envId, host: r.host, port: String(r.port) }),
+        label: r.host,
+      });
+    }
+
+    // Drop listeners that are no longer needed; keep the rest so live connections survive a refresh.
+    for (const [key, listener] of this.#listeners) {
+      if (!wanted.has(key)) {
+        listener.close();
+        this.#listeners.delete(key);
+      }
+    }
     const state = await loadState(env);
+    const current = Object.fromEntries([...this.#listeners].map(([k, l]) => [scope + k, l.port]));
     state.ports = await allocatePorts(
-      keys.map((k) => scope + k),
-      state.ports,
+      [...wanted.keys()].filter((k) => !this.#listeners.has(k)).map((k) => scope + k),
+      { ...state.ports, ...current },
       this.opts.portRange,
     );
     await saveState(state, env);
     const portOf = (key: string) => {
-      const port = state.ports[scope + key];
+      const port = this.#listeners.get(key)?.port ?? state.ports[scope + key];
       if (port === undefined) throw new Error(`agent: no port for ${key}`);
       return port;
     };
@@ -78,19 +94,12 @@ export class Agent {
       else if (code === 4410) this.opts.log?.(`cb: ${what}: ${reason || "access revoked"}`);
       else if (code === 4502) this.opts.log?.(`cb: ${what}: upstream error — ${reason}`);
     };
-    for (const l of b.listeners) {
-      const url = tunnelUrl(this.opts.serverUrl, { layer: "1", env: b.envId, resource: l.resourceId });
-      this.#servers.push(
-        await listenLocal(portOf(listenerKey(l.resourceId)), (s) =>
-          pipeToTunnel(s, url, { token: this.opts.token, onClose: onClose(`${l.kind} "${l.name}"`) }),
-        ),
-      );
-    }
-    for (const r of b.redirects) {
-      const url = tunnelUrl(this.opts.serverUrl, { layer: "2", env: b.envId, host: r.host, port: String(r.port) });
-      this.#servers.push(
-        await listenLocal(portOf(redirectKey(r.host, r.port)), (s) =>
-          pipeToTunnel(s, url, { token: this.opts.token, onClose: onClose(r.host) }),
+    for (const [key, { url, label }] of wanted) {
+      if (this.#listeners.has(key)) continue;
+      this.#listeners.set(
+        key,
+        await listenLocal(portOf(key), (s) =>
+          pipeToTunnel(s, url, { token: this.opts.token, onClose: onClose(label) }),
         ),
       );
     }
@@ -110,9 +119,8 @@ export class Agent {
   }
 
   async closeListeners(): Promise<void> {
-    const servers = this.#servers;
-    this.#servers = [];
-    await Promise.all(servers.map(closeServer));
+    for (const listener of this.#listeners.values()) listener.close();
+    this.#listeners.clear();
   }
 
   async stop(): Promise<void> {
