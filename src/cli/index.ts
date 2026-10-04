@@ -5,6 +5,7 @@ import { Command } from "commander";
 import { PRODUCT_NAME } from "../constants";
 import { CbError } from "../shared/errors";
 import { registerAccountCommands } from "./commands/account";
+import { registerAgentCommands } from "./commands/agent";
 import { registerEnvCommands } from "./commands/env";
 import { registerInitCommand } from "./commands/init";
 import { registerLoginCommands } from "./commands/login";
@@ -24,6 +25,7 @@ registerInitCommand(program);
 registerRunCommand(program);
 registerEnvCommands(program);
 registerStatusCommand(program);
+registerAgentCommands(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);

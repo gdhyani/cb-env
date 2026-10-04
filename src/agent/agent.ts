@@ -34,7 +34,7 @@ export async function fetchBootstrap(o: AgentOptions): Promise<Bootstrap> {
   }
 }
 
-/** In-process agent (M0-D5): listeners, tunnels and the snapshot for one project environment. */
+/** Listeners, tunnels and the snapshot for one project environment (hosted by the daemon, FR-AGT-003). */
 export class Agent {
   readonly opts: AgentOptions;
   snapshot: Snapshot | undefined;
@@ -42,6 +42,12 @@ export class Agent {
   readonly snapshotFile: string;
   /** Listeners by key ("l1:<resource>" / "l2:<host>:<port>"), reused across refreshes. */
   #listeners = new Map<string, LocalListener>();
+  #tunnels = 0;
+
+  /** Open app connections (each is one tunnel); the daemon stays alive while any exist (FR-AGT-007). */
+  get tunnels(): number {
+    return this.#tunnels;
+  }
 
   constructor(opts: AgentOptions) {
     this.opts = opts;
@@ -98,9 +104,13 @@ export class Agent {
       if (this.#listeners.has(key)) continue;
       this.#listeners.set(
         key,
-        await listenLocal(portOf(key), (s) =>
-          pipeToTunnel(s, url, { token: this.opts.token, onClose: onClose(label) }),
-        ),
+        await listenLocal(portOf(key), (s) => {
+          this.#tunnels += 1;
+          s.once("close", () => {
+            this.#tunnels -= 1;
+          });
+          pipeToTunnel(s, url, { token: this.opts.token, onClose: onClose(label) });
+        }),
       );
     }
     this.bootstrap = b;
