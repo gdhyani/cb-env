@@ -1473,6 +1473,8 @@ export interface components {
             /** @description Required when killed=true. */
             reason?: string;
         };
+        /** @description Public PEM CA certificate(s) the server's TLS certificate chains to (self-hosted or private-CA databases). Trusted for this resource only, in addition to the system roots; hostname checks still apply. */
+        CaCertificate: string;
         CreateMongodbResource: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -1483,6 +1485,7 @@ export interface components {
             name: string;
             /** @description Real MongoDB connection URI (mongodb:// or mongodb+srv://). */
             connectionUri: string;
+            caCert?: components["schemas"]["CaCertificate"];
         };
         CreateRedisResource: {
             /**
@@ -1494,6 +1497,7 @@ export interface components {
             name: string;
             /** @description Real Redis URI (redis:// or rediss://). */
             connectionUri: string;
+            caCert?: components["schemas"]["CaCertificate"];
         };
         CreatePostgresResource: {
             /**
@@ -1505,6 +1509,7 @@ export interface components {
             name: string;
             /** @description Real Postgres connection URI. */
             connectionUri: string;
+            caCert?: components["schemas"]["CaCertificate"];
         };
         CreateMysqlResource: {
             /**
@@ -1516,6 +1521,7 @@ export interface components {
             name: string;
             /** @description Real MySQL connection URI. */
             connectionUri: string;
+            caCert?: components["schemas"]["CaCertificate"];
         };
         CreateSmtpResource: {
             /**
@@ -1527,6 +1533,7 @@ export interface components {
             name: string;
             /** @description Real SMTP URI (smtp:// or smtps://). */
             connectionUri: string;
+            caCert?: components["schemas"]["CaCertificate"];
         };
         CreateHttpResource: {
             /**
@@ -1640,6 +1647,8 @@ export interface components {
             disabled?: boolean;
             /** @description Rotates the credential (database/SMTP kinds). */
             connectionUri?: string;
+            /** @description Replaces the CA certificate; an empty string removes it. */
+            caCert?: components["schemas"]["CaCertificate"] | "";
             /** @description Rotates the credential (http). */
             apiKey?: string;
             /** @description Rotates the credential (oauth). */
