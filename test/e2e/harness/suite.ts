@@ -82,7 +82,7 @@ export async function startSuite(name: string, opts: { mongo?: boolean } = {}): 
       return scanEvidence(secretsOf(canaries, [cfg.servicesPassword, cfg.redisPassword]), {
         "app process.env": inEvidence(/^process-env\.\d+\.json$/),
         "app heap snapshots": inEvidence(/^app\.\d+\.heapsnapshot$/),
-        "agent heap snapshot": inEvidence(/^agent\.heapsnapshot$/),
+        "agent heap snapshot": inEvidence(/^agent(\..+)?\.heapsnapshot$/),
         "CB_HOME (incl. agent log)": listFiles(cbHome),
         "backend log": [path.join(evidence, "backend.log")],
         "cb CLI output": [path.join(evidence, "cli.log")],

@@ -1,0 +1,8 @@
+node_modules
+.next
+.cb
+next-env.d.ts
+src/generated
+# Written by next dev on every run; not part of the example
+AGENTS.md
+CLAUDE.md

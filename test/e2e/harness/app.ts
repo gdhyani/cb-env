@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import type { HarnessConfig } from "./config";
 
 const alive = (pid: number) => {
@@ -31,7 +32,9 @@ export function cbEnvFor(cbHome: string, evidenceDir: string, extra: NodeJS.Proc
     CB_CREDENTIAL_STORE: "file",
     CB_TEST_MODE: "1",
     CB_E2E_EVIDENCE_DIR: evidenceDir,
-    NODE_OPTIONS: `--require ${JSON.stringify(path.join(__dirname, "evidence-hook.cjs"))}`,
+    // --import, not a second --require: Next.js re-parses NODE_OPTIONS into one value per flag, so two --require
+    // options collapse into one broken path. A file URL needs no quoting (paths with spaces).
+    NODE_OPTIONS: `--import ${pathToFileURL(path.join(__dirname, "evidence-hook.cjs")).href}`,
     NEXT_TELEMETRY_DISABLED: "1",
     ...extra,
   };
