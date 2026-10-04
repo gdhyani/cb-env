@@ -14,7 +14,12 @@ afterEach(async () => stub?.close());
 function cb(args: string[]): Promise<{ status: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [BIN, ...args], {
-      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, CB_HOME: CB_HOME_DIR },
+      env: {
+        PATH: process.env.PATH,
+        SystemRoot: process.env.SystemRoot,
+        CB_HOME: CB_HOME_DIR,
+        CB_CREDENTIAL_STORE: "file",
+      },
       cwd: CB_HOME_DIR,
     });
     let stdout = "";

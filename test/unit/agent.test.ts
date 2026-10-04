@@ -8,7 +8,8 @@ import { allocatePorts, isPortFree } from "../../src/agent/ports";
 import { renderSnapshot } from "../../src/agent/snapshot";
 import { wrapScripts } from "../../src/cli/commands/init";
 import { appendNodeOption, buildChildEnv, quoteNodeOption } from "../../src/cli/commands/run";
-import { loadCredentials, saveServerCredentials } from "../../src/shared/credentials";
+import { getServerCredentials, removeServerCredentials, saveServerCredentials } from "../../src/shared/credentials";
+import { keychainEnabled } from "../../src/shared/keychain";
 import type { Bootstrap } from "../../src/shared/schemas";
 
 const occupy = (port: number) =>
@@ -99,6 +100,27 @@ describe("credentials (M0-D3)", () => {
       env,
     );
     expect((fs.statSync(path.join(home, "credentials.json")).mode & 0o777).toString(8)).toBe("600");
-    expect((await loadCredentials(env)).servers["http://localhost:4200"]?.token).toBe("cbd_x");
+    expect((await getServerCredentials("http://localhost:4200", env))?.token).toBe("cbd_x");
   });
+
+  // Opt-in: writes one temporary item to the real OS keychain and removes it.
+  it.runIf(process.env.CB_TEST_KEYCHAIN === "1")(
+    "FR-PKG-001 keeps the token in the OS keychain, not on disk",
+    async () => {
+      const home = fs.mkdtempSync(path.join(os.tmpdir(), "cb-keychain-"));
+      const env = { CB_HOME: home, CB_CREDENTIAL_STORE: "keychain" };
+      expect(keychainEnabled(env)).toBe(true);
+      const user = { id: "u", name: "A", email: "a@x" };
+      const where = await saveServerCredentials(
+        "http://localhost:4200",
+        { token: "cbd_keychain_canary", deviceId: "d", deviceName: "mbp", user },
+        env,
+      );
+      expect(where).toBe("keychain");
+      expect(fs.readFileSync(path.join(home, "credentials.json"), "utf8")).not.toContain("cbd_keychain_canary");
+      expect((await getServerCredentials("http://localhost:4200", env))?.token).toBe("cbd_keychain_canary");
+      await removeServerCredentials("http://localhost:4200", env);
+      expect(await getServerCredentials("http://localhost:4200", env)).toBeUndefined();
+    },
+  );
 });

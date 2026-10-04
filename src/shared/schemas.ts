@@ -49,7 +49,9 @@ export const CredentialsSchema = z.object({
   servers: z.record(
     z.string(),
     z.object({
-      token: z.string(),
+      /** Present only with the file store; with the keychain the token never touches disk. */
+      token: z.string().optional(),
+      store: z.enum(["keychain", "file"]).default("file"),
       deviceId: z.string(),
       deviceName: z.string(),
       user: z.object({ id: z.string(), name: z.string(), email: z.string() }),
@@ -57,7 +59,8 @@ export const CredentialsSchema = z.object({
   ),
 });
 export type Credentials = z.infer<typeof CredentialsSchema>;
-export type ServerCredentials = Credentials["servers"][string];
+/** In memory the token is always resolved, whichever store holds it. */
+export type ServerCredentials = Omit<Credentials["servers"][string], "token" | "store"> & { token: string };
 
 export const StateSchema = z.object({
   ports: z.record(z.string(), z.number().int()).default({}),

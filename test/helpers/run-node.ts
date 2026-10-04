@@ -8,7 +8,7 @@ export const REGISTER = path.resolve("dist/register/index.js");
 
 export function runNode(args: string[], env: NodeJS.ProcessEnv = {}) {
   const r = spawnSync(process.execPath, args, {
-    env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, ...env },
+    env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, CB_CREDENTIAL_STORE: "file", ...env },
     encoding: "utf8",
     timeout: 15_000,
   });
@@ -22,7 +22,7 @@ export function runNodeAsync(
 ): Promise<{ status: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, args, {
-      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, ...env },
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, CB_CREDENTIAL_STORE: "file", ...env },
     });
     let stdout = "";
     let stderr = "";

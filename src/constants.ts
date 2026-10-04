@@ -17,6 +17,8 @@ export const ENV = {
   snapshot: "CB_SNAPSHOT_PATH",
   project: "CB_PROJECT_ID",
   environment: "CB_ENVIRONMENT",
+  /** "file" forces ~/.cb/credentials.json instead of the OS keychain (CI, tests). */
+  credentialStore: "CB_CREDENTIAL_STORE",
 } as const;
 
 // PRD Appendix B — cause, effect, next step.

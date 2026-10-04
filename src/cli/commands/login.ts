@@ -38,13 +38,17 @@ export async function login(opts: { server?: string; browser?: boolean; pollInte
     await new Promise((r) => setTimeout(r, interval));
     try {
       const result = await client.post("/api/cli/device/token", { deviceCode: start.deviceCode }, TokenSchema);
-      await saveServerCredentials(server, {
+      const store = await saveServerCredentials(server, {
         token: result.token,
         deviceId: result.device.id,
         deviceName: result.device.name,
         user: result.user,
       });
       out(`Logged in as ${result.user.email} on ${server} (device "${result.device.name}").`);
+      if (store === "file")
+        out(
+          "cb: no OS keychain available; your device token is stored in ~/.cb/credentials.json (readable only by you).",
+        );
       return;
     } catch (err) {
       if (err instanceof CbError && err.code === "DEVICE_AUTH_PENDING") continue;
