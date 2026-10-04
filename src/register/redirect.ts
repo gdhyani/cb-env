@@ -1,3 +1,4 @@
+import http2 from "node:http2";
 import net from "node:net";
 import tls from "node:tls";
 
@@ -98,5 +99,31 @@ export function installRedirects(redirects: Record<string, number>, orgCaCert: s
     }
     // biome-ignore lint/suspicious/noExplicitAny: forwarding the original overloaded call.
     return (originalSocketConnect as any).apply(this, args);
+  };
+
+  // firebase-admin sends `:scheme: "https:"` (a URL.protocol). Google tolerates it, but nghttp2 servers — the
+  // gateway included — reset the stream. Normalize it on redirected sessions only; the meaning is unchanged.
+  const originalH2Connect = http2.connect;
+  // biome-ignore lint/suspicious/noExplicitAny: http2.connect is overloaded; arguments are forwarded verbatim.
+  (http2 as any).connect = function cbH2Connect(authority: string | URL, ...rest: unknown[]) {
+    // biome-ignore lint/suspicious/noExplicitAny: forwarding the original overloaded call.
+    const session = (originalH2Connect as any).call(http2, authority, ...rest) as http2.ClientHttp2Session;
+    let url: URL | undefined;
+    try {
+      url = typeof authority === "string" ? new URL(authority) : authority;
+    } catch {
+      url = undefined;
+    }
+    if (url && lookup(url.hostname, url.port || 443) !== undefined) {
+      const request = session.request;
+      session.request = function cbH2Request(this: http2.ClientHttp2Session, headers, ...args) {
+        const scheme =
+          headers && !Array.isArray(headers) ? (headers as http2.OutgoingHttpHeaders)[":scheme"] : undefined;
+        const fixed =
+          typeof scheme === "string" && scheme.endsWith(":") ? { ...headers, ":scheme": scheme.slice(0, -1) } : headers;
+        return request.call(this, fixed, ...args);
+      } as typeof session.request;
+    }
+    return session;
   };
 }

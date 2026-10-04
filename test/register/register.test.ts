@@ -43,6 +43,19 @@ const cjs = (code: string, env: NodeJS.ProcessEnv = {}) =>
 const esm = (code: string) =>
   runNodeAsync(["--require", REGISTER, "--input-type=module", "-e", code], { CB_SNAPSHOT_PATH: snap });
 
+describe("preload http2 compatibility (FR-REG-003)", () => {
+  it('FR-REG-003 normalizes a URL-style :scheme ("https:") on redirected HTTP/2 sessions', async () => {
+    const code = `
+      const http2 = require("node:http2");
+      const s = http2.connect("https://${HOST}");
+      const q = s.request({ ":method": "GET", ":scheme": "https:", ":path": "/" });
+      q.on("response", (h) => { console.log(h[":status"]); s.close(); });
+      q.on("error", (e) => { console.log(e.code); s.close(); });
+      q.end();`;
+    expect((await cjs(code)).stdout).toBe("200");
+  });
+});
+
 describe("preload env + fail closed (FR-REG-001, FR-REG-002)", () => {
   it("FR-REG-001 fails closed outside cb run, with a missing or revoked snapshot", () => {
     expect(runNode(["--require", REGISTER, "-e", "0"]).stderr).toContain('wasn\'t started with "cb run"');
