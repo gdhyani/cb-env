@@ -86,6 +86,10 @@ function onClient(socket: net.Socket) {
         writeLine(socket, { type: "heap-snapshot", file: v8.writeHeapSnapshot(req.file) });
         return;
       }
+      if (req.type === "webhook-port") {
+        sessions.get(sessionId(req))?.setWebhookPort(socket, req.webhookPort);
+        return;
+      }
       if (req.type === "stop") {
         writeLine(socket, { type: "stopping" });
         setTimeout(() => void shutdown("stop requested"), 50);

@@ -109,6 +109,13 @@ export class Session {
     }
   }
 
+  /** Only for an attached client; the latest run's port wins. */
+  setWebhookPort(socket: net.Socket, port: number) {
+    if (!this.#ports.has(socket)) return;
+    this.#ports.delete(socket);
+    this.#ports.set(socket, port);
+  }
+
   detach(socket: net.Socket) {
     this.clients.delete(socket);
     this.#ports.delete(socket);

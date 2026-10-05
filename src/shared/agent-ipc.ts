@@ -17,6 +17,15 @@ export const AgentRequestSchema = z.discriminatedUnion("type", [
     /** FR-WH-003: where this run's app listens, for webhook delivery (cb run --webhook-port / webhookPort / PORT). */
     webhookPort: z.number().int().min(1).max(65_535).optional(),
   }),
+  /** FR-WH-003: the app port this client's run delivers webhooks to, once it is known (PORT may be a cb variable). */
+  z.object({
+    type: z.literal("webhook-port"),
+    server: z.string().url(),
+    projectId: z.string().min(1),
+    orgId: z.string().optional(),
+    environment: z.string().min(1),
+    webhookPort: z.number().int().min(1).max(65_535),
+  }),
   z.object({ type: z.literal("status") }),
   z.object({ type: z.literal("stop") }),
   /** §13 canary suite only: write the agent's heap snapshot to `file` (refused unless CB_TEST_MODE=1). */
