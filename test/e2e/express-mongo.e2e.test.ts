@@ -9,7 +9,7 @@ import { type Suite, startSuite } from "./harness/suite";
 const dir = path.resolve(__dirname, "../../examples/express-mongo");
 const PORT = 3100;
 const base = `http://127.0.0.1:${PORT}`;
-const ROUTES = ["/mongo", "/redis", "/razorpay", "/s3", "/ses", "/mail", "/fcm", "/apns"];
+const ROUTES = ["/mongo", "/redis", "/razorpay", "/s3", "/ses", "/mail", "/fcm", "/fcm-file", "/apns"];
 
 describe.skipIf(!servicesAvailable())("examples/express-mongo under cb run (§15, §13)", () => {
   let suite: Suite;
@@ -98,7 +98,10 @@ describe.skipIf(!servicesAvailable())("examples/express-mongo under cb run (§15
               token_uri: "https://oauth2.googleapis.com/token",
             }),
           },
-          vars: [["FIREBASE_SERVICE_ACCOUNT", "credentialsJson"]],
+          vars: [
+            ["FIREBASE_SERVICE_ACCOUNT", "credentialsJson"],
+            ["GOOGLE_APPLICATION_CREDENTIALS", "credentialsFile"],
+          ],
         },
         {
           body: {

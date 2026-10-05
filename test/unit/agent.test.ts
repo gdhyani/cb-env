@@ -41,6 +41,7 @@ const BOOT: Bootstrap = {
   listeners: [{ resourceId: "r1", kind: "redis", name: "cache", env: { REDIS_URL: "redis://u:p@127.0.0.1:{port}" } }],
   redirects: [{ host: "API.provider.test", port: 443, resourceId: "r2" }],
   visibleKeys: [],
+  files: {},
 };
 
 describe("snapshot (§12.4)", () => {

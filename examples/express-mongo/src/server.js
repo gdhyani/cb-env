@@ -4,7 +4,7 @@ import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import apn from "@parse/node-apn";
 import express from "express";
-import { cert, initializeApp } from "firebase-admin/app";
+import { applicationDefault, cert, initializeApp } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 import { Redis } from "ioredis";
 import mongoose from "mongoose";
@@ -76,6 +76,11 @@ route("/mail", async () => {
   const info = await mailer.sendMail({ from: "shop@example.test", to: "a@example.test", subject: "hi", text: "hi" });
   return { accepted: info.accepted };
 });
+// The other common setup: the SDK finds the key file itself through GOOGLE_APPLICATION_CREDENTIALS.
+const firebaseFromFile = initializeApp({ credential: applicationDefault() }, "from-file");
+route("/fcm-file", () =>
+  getMessaging(firebaseFromFile).send({ token: "device-token-e2e", notification: { title: "from file" } }),
+);
 route("/fcm", () => getMessaging(firebase).send({ token: "device-token-e2e", notification: { title: "hi" } }));
 route("/apns", async () => {
   const note = new apn.Notification({ alert: "hi", topic: "test.shop" });
