@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 // The daemon runs from the build (global setup compiles it); load the built IPC client so paths line up.
 const ipc = require("../../dist/shared/agent-ipc.js") as typeof import("../../src/shared/agent-ipc");
+const { agentLogPath } = require("../../dist/shared/paths.js") as typeof import("../../src/shared/paths");
 const { saveServerCredentials } =
   require("../../dist/shared/credentials.js") as typeof import("../../src/shared/credentials");
 
@@ -277,4 +278,24 @@ describe("FR-WH-003 agent delivers webhooks to the app run with cb (daemon)", ()
     expect(backend.connections()).toBeGreaterThan(3); // it really reconnected along the way
     conn.close();
   }, 60_000);
+
+  it("review M5: cb run sends the app port with webhook-port (one attach, no second attached reply)", async () => {
+    const { backend, env } = await setup();
+    const app = await devApp();
+    const conn = await ipc.ensureAgent(env);
+    const seen: string[] = [];
+    conn.onMessage((m) => seen.push(m.type));
+    const target = { server: backend.url, projectId: "p1", environment: "development" };
+    conn.send({ type: "attach", ...target });
+    await conn.next("attached");
+    conn.send({ type: "webhook-port", ...target, webhookPort: app.port });
+    await new Promise((r) => setTimeout(r, 200));
+    backend.deliver(push(900));
+    await until(() => backend.acks.has("del_900"));
+    expect(app.got.map((g) => JSON.parse(g.body).id)).toEqual(["evt_900"]);
+    expect(seen.filter((t) => t === "attached")).toHaveLength(1);
+    const log = fs.readFileSync(agentLogPath(env), "utf8");
+    expect(log.match(/client attached/g)).toHaveLength(1);
+    conn.close();
+  });
 });

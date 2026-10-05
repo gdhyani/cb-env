@@ -116,7 +116,7 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
     ...readSnapshotSync(snapshotFile).env,
   });
   const request = { ...base, webhookPort };
-  if (webhookPort !== shellPort) conn.send({ type: "attach", ...request });
+  if (webhookPort !== undefined && webhookPort !== shellPort) conn.send({ type: "webhook-port", ...base, webhookPort });
   // J7: while access is revoked or stopped, refuse to start (the preload would fail closed anyway).
   if (summary.revoked) {
     const reason = readSnapshotSync(snapshotFile).revokedReason ?? "access revoked";
