@@ -47,6 +47,7 @@ describe("agent refresh (FR-AGT-006, J6)", () => {
       listeners: [{ resourceId: "r1", kind: "redis", name: "cache", env: { REDIS_URL: "redis://127.0.0.1:{port}" } }],
       redirects: [],
       visibleKeys: [],
+      files: {},
     });
     const serverUrl = await stubBackend(boot);
     const agent = new Agent({

@@ -1604,6 +1604,10 @@ export interface components {
             }[];
             /** @description Keys in `plain` that carry real values marked visible. */
             visibleKeys: string[];
+            /** @description OQ8 — key → content of a fake key file the agent writes (0600) and points the key at. */
+            files?: {
+                [key: string]: string;
+            };
         };
         SignupBody: {
             name: string;
@@ -1781,6 +1785,11 @@ export interface components {
             basePath: string;
             /** @default [] */
             redirectHosts: string[];
+            caCert?: components["schemas"]["CaCertificate"];
+            /** @description OQ9: non-secret headers sent on every call (stored lowercased). Not allowed: authorization, x-api-key, cookie, host and transport headers, or the named key header. */
+            extraHeaders?: {
+                [key: string]: string;
+            };
         };
         CreateAwsResource: {
             /**
@@ -1885,6 +1894,10 @@ export interface components {
         CreateResourceBody: components["schemas"]["CreatePostgresResource"] | components["schemas"]["CreateMysqlResource"] | components["schemas"]["CreateMongodbResource"] | components["schemas"]["CreateRedisResource"] | components["schemas"]["CreateSmtpResource"] | components["schemas"]["CreateHttpResource"] | components["schemas"]["CreateOauthResource"] | components["schemas"]["CreateAwsResource"] | components["schemas"]["CreateGoogleSaResource"] | components["schemas"]["CreateApnsResource"] | components["schemas"]["CreateWebhookResource"];
         /** @description All fields optional; fields that do not apply to the resource's kind are ignored. */
         UpdateResourceBody: {
+            /** @description OQ9 — replaces the service's extra headers ({} removes them). */
+            extraHeaders?: {
+                [key: string]: string;
+            };
             /** @description Webhook services — replace the real signing secret (device fakes stay the same). */
             signingSecret?: string;
             /** @description Webhook services — path in the app the agent posts to. */

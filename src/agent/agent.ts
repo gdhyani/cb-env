@@ -5,6 +5,7 @@ import { createBackendClient } from "../shared/http";
 import { snapshotPath } from "../shared/paths";
 import { type Bootstrap, BootstrapSchema, type Snapshot } from "../shared/schemas";
 import { loadState, saveState } from "../shared/state";
+import { writeFakeFiles } from "./fake-files";
 import { type LocalListener, listenLocal } from "./listeners";
 import { allocatePorts } from "./ports";
 import { listenerKey, redirectKey, renderSnapshot } from "./snapshot";
@@ -119,7 +120,7 @@ export class Agent {
       );
     }
     this.bootstrap = b;
-    this.snapshot = renderSnapshot(b, portOf);
+    this.snapshot = renderSnapshot(b, portOf, await writeFakeFiles(b, this.opts.env ?? process.env));
     await writeJsonAtomic(this.snapshotFile, this.snapshot);
     return this.snapshot;
   }

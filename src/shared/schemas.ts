@@ -16,6 +16,8 @@ export const BootstrapSchema = z.object({
   ),
   redirects: z.array(z.object({ host: z.string(), port: z.number().int(), resourceId: z.string() })),
   visibleKeys: z.array(z.string()),
+  /** OQ8: key → fake key-file content (written by the agent; older backends send none). */
+  files: z.record(z.string(), z.string()).default({}),
 });
 export type Bootstrap = z.infer<typeof BootstrapSchema>;
 
