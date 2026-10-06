@@ -211,10 +211,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create (or point again) the Stripe webhook endpoint with the environment's stored Stripe key (admin)
-         * @description Uses the Stripe secret key stored in the same environment to create an all-events webhook endpoint at this service's webhookUrl; the signing secret Stripe returns is stored and never shown. Connecting again updates the endpoint's URL and keeps its secret.
+         * Create (or point again) the provider's webhook with the environment's stored API key (admin)
+         * @description Stripe: full events (an all-events v1 endpoint) and/or thin events (a v2 event destination with a named event list), both at this service's webhookUrl; the signing secrets Stripe returns are stored and never shown; a payload left out is removed in Stripe. Razorpay: one webhook (v1 webhooks API) with the usual payment, order and refund events and the stored (or a new cb-made) secret. Connecting again updates the URL and keeps the secrets. Config afterwards: connectedUrl, livemode, secretsSet, secretOrigin "connected", and stripeEndpointId / stripeThinDestinationId / thinEvents / connectedPayloads or razorpayWebhookId / razorpayEvents. Removing the service removes (Stripe) or switches off (Razorpay) the provider side.
          */
-        post: operations["connectStripeWebhook"];
+        post: operations["connectWebhook"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2747,7 +2747,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
-    connectStripeWebhook: {
+    connectWebhook: {
         parameters: {
             query?: never;
             header?: {
@@ -2759,7 +2759,14 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Stripe only — which payloads the app reads (full = constructEvent, thin = parseEventNotification). Default — what is connected now, else full. */
+                    payloads?: ("full" | "thin")[];
+                };
+            };
+        };
         responses: {
             /** @description OK */
             200: {
