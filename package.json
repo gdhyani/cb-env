@@ -7,7 +7,9 @@
     "cb": "./dist/cli/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=22"
@@ -51,5 +53,14 @@
     "./package.json": "./package.json"
   },
   "main": "./dist/api/index.js",
-  "types": "./dist/api/index.d.ts"
+  "types": "./dist/api/index.d.ts",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gdhyani/cb-env.git"
+  },
+  "homepage": "https://github.com/gdhyani/cb-env#readme",
+  "bugs": {
+    "url": "https://github.com/gdhyani/cb-env/issues"
+  }
 }
