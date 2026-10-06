@@ -1851,6 +1851,11 @@ export interface components {
             accessKeyId: string;
             /** @description Real secret access key. */
             secretAccessKey: string;
+            /**
+             * @description Which AWS API the endpoint serves (Save & test signs a call of that kind). Read from the endpoint host when absent.
+             * @enum {string}
+             */
+            awsService?: "s3" | "ses" | "sqs";
         };
         CreateGoogleSaResource: {
             /**
@@ -1943,6 +1948,11 @@ export interface components {
             extraHeaders?: {
                 [key: string]: string;
             };
+            /**
+             * @description AWS services — which AWS API the endpoint serves.
+             * @enum {string}
+             */
+            awsService?: "s3" | "ses" | "sqs";
             /** @description API services — let other (public) keys through unchanged. */
             passOtherKeys?: boolean;
             /** @description Webhook services — replace the real signing secret (device fakes stay the same). */
