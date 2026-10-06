@@ -341,9 +341,34 @@ describe("FR-WH-003 agent delivers webhooks to the app run with cb (daemon)", ()
     const port = Number(fs.readFileSync(portFile, "utf8"));
     expect(port).not.toBe(3000);
     await until(() => out.includes(`webhooks → 127.0.0.1:${port}`), 10_000);
+    // The detected port asked the backend at once for anything that waited (not at the next retry).
+    const before = backend.redelivers();
+    expect(before).toBeGreaterThanOrEqual(2);
     backend.deliver(push(501));
     await until(() => backend.acks.has("del_501"), 10_000);
     expect(fs.readFileSync(received, "utf8")).toContain('/api/webhooks/stripe {"id":"evt_501","n":501}');
     expect(backend.acks.get("del_501")).toMatchObject({ ok: true, status: 200 });
   }, 40_000);
+
+  it("FR-WH-003 while cb run waits for the app's port, webhooks wait too (never tried on a guessed port)", async () => {
+    const { backend, env } = await setup();
+    const app = await devApp();
+    const conn = await ipc.ensureAgent(env);
+    const notices: string[] = [];
+    conn.onMessage((m) => {
+      if (m.type === "notice") notices.push(m.message);
+    });
+    const target = { server: backend.url, projectId: "p1", environment: "development" };
+    conn.send({ type: "attach", ...target, detectPort: true });
+    await conn.next("attached");
+    await until(() => backend.openStreams() > 0);
+    backend.deliver(push(700));
+    await new Promise((r) => setTimeout(r, 600));
+    expect(app.got).toHaveLength(0);
+    expect(notices.some((n) => /not delivered — nothing is listening/.test(n))).toBe(false);
+    conn.send({ type: "webhook-port", ...target, webhookPort: app.port });
+    await until(() => backend.acks.has("del_700"));
+    expect(app.got.map((g) => JSON.parse(g.body).id)).toEqual(["evt_700"]);
+    conn.close();
+  });
 });

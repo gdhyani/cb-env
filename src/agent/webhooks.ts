@@ -82,11 +82,13 @@ export function createWebhookDeliverer(opts: {
       const result = { ...(await post(push)), generation: push.generation };
       remember(key, result);
       const label = `webhook ${push.provider} ${push.type || push.eventId}`;
-      opts.notify(
-        result.ok
-          ? `cb: ${label} → ${result.status} (${result.ms} ms)`
-          : `cb: ${label} not delivered — ${result.error}${result.status ? "" : "; cb retries"}`,
-      );
+      // Waiting for the app to start is not a failure worth a line in the terminal.
+      if (!result.noApp)
+        opts.notify(
+          result.ok
+            ? `cb: ${label} → ${result.status} (${result.ms} ms)`
+            : `cb: ${label} not delivered — ${result.error}${result.status ? "" : "; cb retries"}`,
+        );
       await opts.ack(push.deliveryId, result).catch(() => undefined);
     })().finally(() => inFlight.delete(key));
     inFlight.set(key, task);

@@ -33,6 +33,8 @@ export const ENV = {
   /** Override the event-stream watchdog and backoff cap (soak tests; ms). */
   eventsIdleMs: "CB_EVENTS_IDLE_MS",
   eventsBackoffMaxMs: "CB_EVENTS_BACKOFF_MAX_MS",
+  /** Identity of the cb build the agent runs; set by whoever starts it (overridable in tests). */
+  agentBuild: "CB_AGENT_BUILD",
   /** "1" enables test-only agent commands (heap snapshot for the §13 canary suite). */
   testMode: "CB_TEST_MODE",
 } as const;
@@ -67,4 +69,6 @@ export const EVENTS_BACKOFF_MAX_MS = 30_000;
 export const WEBHOOK_APP_TIMEOUT_MS = 10_000;
 export const WEBHOOK_DEDUPE_SIZE = 2_000;
 /** App port when neither the run nor the service names one. */
+/** FR-WH-003: how long cb run waits to see the app's listening port before falling back to PORT / 3000. */
+export const WEBHOOK_DETECT_WAIT_MS = 10_000;
 export const WEBHOOK_DEFAULT_PORT = 3000;

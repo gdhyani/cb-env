@@ -8,6 +8,7 @@ import { allocatePorts, isPortFree } from "../../src/agent/ports";
 import { renderSnapshot } from "../../src/agent/snapshot";
 import { wrapScripts } from "../../src/cli/commands/init";
 import { appendNodeOption, buildChildEnv, quoteNodeOption } from "../../src/cli/commands/run";
+import { shouldReplace } from "../../src/shared/agent-ipc";
 import { getServerCredentials, removeServerCredentials, saveServerCredentials } from "../../src/shared/credentials";
 import { keychainEnabled } from "../../src/shared/keychain";
 import type { Bootstrap } from "../../src/shared/schemas";
@@ -124,4 +125,13 @@ describe("credentials (M0-D3)", () => {
       expect(await getServerCredentials("http://localhost:4200", env)).toBeUndefined();
     },
   );
+});
+
+describe("FR-AGT-001 which agent build stays running", () => {
+  it("replaces older or unknown builds, never a newer one", () => {
+    expect(shouldReplace(undefined, "0.0.0:200")).toBe(true);
+    expect(shouldReplace("0.0.0:200", "0.0.0:200")).toBe(false);
+    expect(shouldReplace("0.0.0:100", "0.0.0:200")).toBe(true);
+    expect(shouldReplace("0.0.0:300", "0.0.0:200")).toBe(false);
+  });
 });

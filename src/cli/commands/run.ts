@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { Command } from "commander";
 import spawn from "cross-spawn";
-import { AGENT_HEALTH_MS, ENV, MSG } from "../../constants";
+import { AGENT_HEALTH_MS, ENV, MSG, WEBHOOK_DEFAULT_PORT, WEBHOOK_DETECT_WAIT_MS } from "../../constants";
 import { readSnapshotSync } from "../../register/snapshot";
 import { type AgentConnection, ensureAgent, type SessionSummary } from "../../shared/agent-ipc";
 import { requireServerCredentials } from "../../shared/credentials";
@@ -90,7 +90,14 @@ export async function resolveEnvironmentName(
 /** Connects to the daemon (starting it if needed) and attaches this project environment. */
 async function attach(
   env: NodeJS.ProcessEnv,
-  request: { server: string; projectId: string; orgId?: string; environment: string; webhookPort?: number },
+  request: {
+    server: string;
+    projectId: string;
+    orgId?: string;
+    environment: string;
+    webhookPort?: number;
+    detectPort?: boolean;
+  },
 ): Promise<{ conn: AgentConnection; snapshotFile: string; summary: SessionSummary }> {
   const conn = await ensureAgent(env);
   conn.send({ type: "attach", ...request });
@@ -112,15 +119,24 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
   const [file, ...args] = cmd;
   if (!file) throw new Error("cb run: missing command. Usage: cb run -- <command>");
   const base = { server, projectId: config.projectId, orgId: config.orgId, environment };
+  // FR-WH-003: unless a port is set, the agent waits for the port the app really opens (preload detection).
+  const detect = opts.webhookPort === undefined && config.webhookPort === undefined;
   // PORT may itself be a cb variable: the first attach writes the snapshot, then the final port is re-sent.
-  const shellPort = resolveWebhookPort(opts.webhookPort, config.webhookPort, parentEnv);
-  let { conn, snapshotFile, summary } = await attach(parentEnv, { ...base, webhookPort: shellPort });
+  const shellPort = detect ? undefined : resolveWebhookPort(opts.webhookPort, config.webhookPort, parentEnv);
+  let { conn, snapshotFile, summary } = await attach(parentEnv, {
+    ...base,
+    webhookPort: shellPort,
+    detectPort: detect,
+  });
   const webhookPort = resolveWebhookPort(opts.webhookPort, config.webhookPort, {
     ...parentEnv,
     ...readSnapshotSync(snapshotFile).env,
   });
-  const request: typeof base & { webhookPort?: number } = { ...base, webhookPort };
-  if (webhookPort !== undefined && webhookPort !== shellPort) conn.send({ type: "webhook-port", ...base, webhookPort });
+  const request: typeof base & { webhookPort?: number; detectPort?: boolean } = detect
+    ? { ...base, detectPort: true }
+    : { ...base, webhookPort };
+  if (!detect && webhookPort !== undefined && webhookPort !== shellPort)
+    conn.send({ type: "webhook-port", ...base, webhookPort });
   // J7: while access is revoked or stopped, refuse to start (the preload would fail closed anyway).
   if (summary.revoked) {
     const reason = readSnapshotSync(snapshotFile).revokedReason ?? "access revoked";
@@ -129,10 +145,7 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
   }
   // FR-WH-003: follow the port the app really listens on (changes with it); --webhook-port or a project webhookPort
   // turns it off. Started after the revoked check so a refused run leaves nothing behind.
-  const listenFile =
-    opts.webhookPort === undefined && config.webhookPort === undefined
-      ? `${snapshotFile}.${process.pid}.listen`
-      : undefined;
+  const listenFile = detect ? `${snapshotFile}.${process.pid}.listen` : undefined;
   const listenWatch = listenFile
     ? watchListenFile(
         listenFile,
@@ -143,9 +156,20 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
           note(`cb: webhooks → 127.0.0.1:${port} (the port your app listens on)`);
         },
         undefined,
-        resolveWebhookPort(undefined, undefined, { ...parentEnv, ...readSnapshotSync(snapshotFile).env }),
+        webhookPort,
       )
     : undefined;
+  // Not a Node app (or it never listens): after a while, fall back to PORT (or 3000) instead of waiting forever.
+  const fallback = detect
+    ? setTimeout(() => {
+        if (request.webhookPort !== undefined) return;
+        const port = webhookPort ?? WEBHOOK_DEFAULT_PORT;
+        request.webhookPort = port;
+        conn.send({ type: "webhook-port", ...base, webhookPort: port });
+        note(`cb: no listening port seen yet — webhooks → 127.0.0.1:${port}`);
+      }, WEBHOOK_DETECT_WAIT_MS)
+    : undefined;
+  fallback?.unref?.();
   note(
     `cb: ${config.projectSlug ?? config.projectId} / ${environment} — ${summary.listeners} brokered connection(s), ${summary.redirects} redirected host(s)`,
   );
@@ -221,6 +245,7 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
     finished = true;
     clearInterval(health);
     listenWatch?.close();
+    if (fallback) clearTimeout(fallback);
     conn.close();
     process.off("SIGINT", onSigint);
     process.off("SIGTERM", onSigterm);
