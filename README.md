@@ -1,9 +1,31 @@
 # @cb/env
 
-CLI (`cb`), local agent and preload for cb credentialless development environments.
-Structure, conventions and rules: see the repo guide (`CLAUDE.md`).
+Run your app with real databases and APIs without ever holding a real secret: the `cb` CLI, local agent and preload for cb credentialless development environments.
 
-## Develop
+**Documentation:** the cb dashboard serves the docs at `/docs`; their source is in
+[`content/docs/`](https://github.com/gdhyani/cb-dashboard/tree/main/content/docs) of gdhyani/cb-dashboard.
+
+## Quick start
+
+```bash
+npm i -D @cb/env
+npx cb login            # approve this device in the dashboard
+npx cb init             # link this folder to a cb project and wire your package.json scripts
+npm run dev             # your app now runs under cb
+```
+
+Your app reads stand-in values from `process.env`; the local agent tunnels its connections to the cb gateway,
+which uses the real credential. To run any other command the same way:
+
+```bash
+npx cb run -- node server.js
+```
+
+`cb run` options: `--env <name>`, `--server <url>`, `--no-restart`, `--webhook-port <port>`.
+Other commands: `cb whoami`, `cb logout`, `cb status`, `cb doctor`, `cb shell`, `cb env print`, `cb env use <name>`,
+`cb types`, `cb up` / `cb down`, `cb agent status` / `cb agent stop`, `cb webhooks listen`.
+
+## Development
 
 ```bash
 npm install
@@ -12,16 +34,17 @@ node dist/cli/index.js status          # backend health (default server http://l
 node dist/cli/index.js status --json
 ```
 
-## Scripts
+### Scripts
 
 | Script | What it does |
 |---|---|
 | `npm run build` | Compile to `dist/` (CommonJS) |
 | `npm test` | Vitest (builds first; CLI tests run the compiled bin) |
 | `npm run typecheck` / `npm run lint` | TypeScript / Biome |
-| `npm run test:e2e` | Example apps under `cb run` against the real backend, with the §13 canary scan (see below) |
+| `npm run sync:contract` | Regenerate API types from `../cb-backend/contracts/openapi.yaml` |
+| `npm run test:e2e` | Example apps under `cb run` against the real backend, with a canary leak scan (see below) |
 
-## End-to-end proof (`examples/` + `test/e2e/`)
+### End-to-end proof (`examples/` + `test/e2e/`)
 
 Three ordinary apps use official SDKs and know nothing about cb:
 - `express-mongo`: mongoose, ioredis, Razorpay, S3 with presign, SES, nodemailer, FCM, APNs.
@@ -48,3 +71,12 @@ docker compose -f ../cb-backend/docker-compose.test.yml up -d --wait
 (cd examples/express-mongo && npm ci) && (cd examples/nest-mysql && npm ci && npm run build) && (cd examples/nextjs-prisma && npm ci)
 npm run test:e2e                 # or: npm run test:e2e -- nextjs-prisma ; CB_E2E_KEEP=1 keeps the evidence folder
 ```
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request, and report
+vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE).

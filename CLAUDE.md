@@ -14,6 +14,11 @@ CLI `cb`, the thin local **agent**, the **preload** (`@cb/env/register`) and the
 - Every change goes on a new branch → pull request → merge into `main`. Never commit to `main` directly.
 - **Keep `../product.md` current:** any change to structure, tooling, contracts, defaults or behaviour is
   written into the PRD and logged in PRD §20 with a version bump, in the same change.
+- **Keep the public docs current (FR-DOC-008):** every change merged into `main` that a user or contributor can
+  see (CLI commands/flags, API, config/env vars, connectors, error messages, limits, setup) updates the matching
+  page in `../cb-dashboard/content/docs/` (and affected screenshots) together with `../product.md`. Open that docs
+  PR in cb-dashboard alongside this one and merge it no later than the code PR. Nothing user-visible changed →
+  the PR description says `Docs: not needed — <reason>`.
 
 - **Docs stay local:** everything under `docs/` (plans, specs, trial notes) is gitignored and never
   pushed. Do not commit plan or design documents anywhere else in the repo.
