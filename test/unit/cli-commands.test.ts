@@ -71,6 +71,9 @@ describe("cb doctor .env scan (FR-PKG-009)", () => {
     expect(env1?.status).toBe("fail");
     expect(env1?.detail).toContain("Stripe live key");
     expect(env1?.detail).toContain("database URL with a password");
+    // F2: doctor names what it found, never the value.
+    expect(JSON.stringify(checks)).not.toContain("hunter2");
+    expect(JSON.stringify(checks)).not.toContain("sk_live_abcdefghijkl123");
     expect(checks.find((c) => c.name === ".env.local: cb-managed keys")).toMatchObject({
       status: "warn",
       detail: "REDIS_URL",
