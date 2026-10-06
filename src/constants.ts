@@ -22,6 +22,8 @@ export const ENV = {
   server: "CB_SERVER_URL",
   token: "CB_TOKEN",
   snapshot: "CB_SNAPSHOT_PATH",
+  /** FR-WH-003: file the preload appends each listening server's port to; cb run picks the app's port from it. */
+  listenFile: "CB_LISTEN_FILE",
   project: "CB_PROJECT_ID",
   environment: "CB_ENVIRONMENT",
   /** "file" forces ~/.cb/credentials.json instead of the OS keychain (CI, tests). */

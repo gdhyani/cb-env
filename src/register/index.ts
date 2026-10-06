@@ -1,5 +1,6 @@
 import { syncBuiltinESMExports } from "node:module";
 import { ENV, MSG } from "../constants";
+import { installListenReport } from "./listen-report";
 import { installRedirects } from "./redirect";
 import { readSnapshotSync } from "./snapshot";
 
@@ -17,5 +18,7 @@ if (!g[INSTALLED]) {
     if (process.env[key] === undefined) process.env[key] = value;
   }
   installRedirects(snapshot.redirects, snapshot.orgCaCert);
+  const listenFile = process.env[ENV.listenFile];
+  if (listenFile) installListenReport(listenFile);
   syncBuiltinESMExports();
 }
