@@ -225,4 +225,26 @@ describe("background agent daemon (FR-AGT-001, FR-AGT-006, FR-AGT-007)", () => {
     expect((await restarted.next("stopping")).type).toBe("stopping");
     expect(await waitFor(async () => !(await agentListening(env)), 8000, 1500)).toBe(true);
   });
+
+  it("FR-AGT-001 an agent from another cb build is replaced (an upgrade never keeps old agent code running)", async () => {
+    const { env } = await setup();
+    const v1 = { ...env, CB_AGENT_BUILD: "build-1" };
+    const first = await ipc.ensureAgent(v1);
+    first.send({ type: "status" });
+    const s1 = await first.next("status");
+    first.close();
+    const second = await ipc.ensureAgent({ ...env, CB_AGENT_BUILD: "build-2" });
+    second.send({ type: "status" });
+    const s2 = await second.next("status");
+    expect(s1.type === "status" && s2.type === "status" && s1.pid !== s2.pid).toBe(true);
+    expect(s2.type === "status" && s2.build).toBe("build-2");
+    // Same build: the running agent is kept.
+    const third = await ipc.ensureAgent({ ...env, CB_AGENT_BUILD: "build-2" });
+    third.send({ type: "status" });
+    const s3 = await third.next("status");
+    expect(s3.type === "status" && s3.pid).toBe(s2.type === "status" && s2.pid);
+    second.close();
+    third.send({ type: "stop" });
+    await third.next("stopping");
+  });
 });

@@ -28,7 +28,8 @@ export class Session {
   readonly key: SessionKey;
   readonly clients = new Set<net.Socket>();
   /** Webhook port each attached `cb run` named, in attach order (the latest run wins). */
-  readonly #ports = new Map<net.Socket, number | undefined>();
+  /** Per attached run: its app port; null while the run is still detecting it (webhooks wait). */
+  readonly #ports = new Map<net.Socket, number | undefined | null>();
   #webhooks: ReturnType<typeof createWebhookDeliverer> | undefined;
   agent: Agent | undefined;
   revoked = false;
@@ -63,7 +64,9 @@ export class Session {
     this.#webhooks = createWebhookDeliverer({
       appPort: () => {
         const ports = [...this.#ports.values()];
-        return { attached: ports.length > 0, port: ports.reverse().find((p) => p !== undefined) };
+        // The newest run decides; while it is still finding its app's port, nothing is guessed.
+        if (ports.at(-1) === null) return { attached: false };
+        return { attached: ports.length > 0, port: ports.reverse().find((p): p is number => typeof p === "number") };
       },
       ack: async (deliveryId, body) => {
         const client = createBackendClient({
@@ -81,11 +84,11 @@ export class Session {
     this.#subscribe();
   }
 
-  attach(socket: net.Socket, webhookPort?: number) {
+  attach(socket: net.Socket, webhookPort?: number, detectPort = false) {
     const first = !this.#ports.has(socket);
     this.clients.add(socket);
     this.#ports.delete(socket);
-    this.#ports.set(socket, webhookPort);
+    this.#ports.set(socket, webhookPort ?? (detectPort ? null : undefined));
     // FR-WH-003: an app just started under cb — webhooks that waited for it go out now, not at the next retry.
     if (first) void this.#redeliver();
   }
@@ -112,8 +115,11 @@ export class Session {
   /** Only for an attached client; the latest run's port wins. */
   setWebhookPort(socket: net.Socket, port: number) {
     if (!this.#ports.has(socket)) return;
+    const changed = this.#ports.get(socket) !== port;
     this.#ports.delete(socket);
     this.#ports.set(socket, port);
+    // The app's real port just became known: whatever waited (or failed on a guessed port) goes out now.
+    if (changed) void this.#redeliver();
   }
 
   detach(socket: net.Socket) {

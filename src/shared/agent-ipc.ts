@@ -3,7 +3,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { z } from "zod";
-import { AGENT_START_TIMEOUT_MS, AGENT_VERSION } from "../constants";
+import { AGENT_START_TIMEOUT_MS, AGENT_VERSION, ENV } from "../constants";
 import { agentLogPath, agentSocketPath } from "./paths";
 
 /** CLI → agent requests (newline-delimited JSON over the control socket). */
@@ -16,6 +16,8 @@ export const AgentRequestSchema = z.discriminatedUnion("type", [
     environment: z.string().min(1),
     /** FR-WH-003: where this run's app listens, for webhook delivery (cb run --webhook-port / webhookPort / PORT). */
     webhookPort: z.number().int().min(1).max(65_535).optional(),
+    /** The run is still finding its app's port (preload detection): webhooks wait until webhook-port arrives. */
+    detectPort: z.boolean().optional(),
   }),
   /** FR-WH-003: the app port this client's run delivers webhooks to, once it is known (PORT may be a cb variable). */
   z.object({
@@ -56,6 +58,8 @@ export const AgentMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("status"),
     pid: z.number(),
     version: z.string(),
+    /** Which cb build the agent runs (absent on agents older than this field). */
+    build: z.string().optional(),
     uptimeMs: z.number(),
     sessions: z.array(SessionSummary),
   }),
@@ -141,20 +145,70 @@ export function connectAgent(env: NodeJS.ProcessEnv = process.env): Promise<Agen
 /** dist/shared/agent-ipc.js → dist/agent/main.js */
 export const agentEntry = () => path.resolve(__dirname, "..", "agent", "main.js");
 
+/** This cb build: version plus the agent file's modification time (a rebuild or reinstall changes it). */
+export function agentBuild(env: NodeJS.ProcessEnv = process.env): string {
+  const override = env[ENV.agentBuild];
+  if (override) return override;
+  try {
+    return `${AGENT_VERSION}:${Math.round(fs.statSync(agentEntry()).mtimeMs)}`;
+  } catch {
+    return AGENT_VERSION;
+  }
+}
+
+/** The running agent's build, or undefined (older agents don't report one, or no answer in 2 s). */
+async function runningBuild(conn: AgentConnection): Promise<string | undefined> {
+  conn.send({ type: "status" });
+  const status = await Promise.race([
+    conn.next("status").catch(() => undefined),
+    new Promise<undefined>((r) => setTimeout(r, 2_000)),
+  ]);
+  return status?.type === "status" ? status.build : undefined;
+}
+
+/**
+ * Replace the running agent only with a newer build: unknown (older agent) → yes; two installs of different ages
+ * (two projects) never take turns replacing each other — the newer one wins and stays.
+ */
+export function shouldReplace(running: string | undefined, mine: string): boolean {
+  if (running === undefined) return true;
+  if (running === mine) return false;
+  const time = (b: string) => Number(b.slice(b.lastIndexOf(":") + 1));
+  const [r, m] = [time(running), time(mine)];
+  return Number.isFinite(r) && Number.isFinite(m) && r > 0 && m > 0 ? m > r : true;
+}
+
+/** Is an agent still listening? (a short-lived connection, closed at once) */
+async function probe(env: NodeJS.ProcessEnv): Promise<boolean> {
+  const conn = await connectAgent(env);
+  conn?.socket.destroy();
+  return Boolean(conn);
+}
+
 /**
  * FR-AGT-001/007: connect to the agent, starting it detached (own process group, output to the agent log)
  * when it isn't running. A concurrent start by another `cb run` is fine: the loser exits on the single-instance lock.
  */
 export async function ensureAgent(env: NodeJS.ProcessEnv = process.env): Promise<AgentConnection> {
+  const build = agentBuild(env);
   const existing = await connectAgent(env);
-  if (existing) return existing;
+  if (existing) {
+    if (!shouldReplace(await runningBuild(existing), build)) return existing;
+    // An agent from another cb build (cb was upgraded or rebuilt): replace it so new features are not silently
+    // missing. Running apps reconnect on their own (cb run re-attaches when the agent goes away).
+    existing.send({ type: "stop" });
+    await existing.next("stopping").catch(() => undefined);
+    existing.close();
+    const gone = Date.now() + AGENT_START_TIMEOUT_MS;
+    while (Date.now() < gone && (await probe(env))) await new Promise((r) => setTimeout(r, 100));
+  }
   const log = agentLogPath(env);
   fs.mkdirSync(path.dirname(log), { recursive: true });
   const out = fs.openSync(log, "a");
   const child = spawn(process.execPath, [agentEntry()], {
     detached: true,
     stdio: ["ignore", out, out],
-    env: { ...env, CB_AGENT_VERSION: AGENT_VERSION },
+    env: { ...env, CB_AGENT_VERSION: AGENT_VERSION, [ENV.agentBuild]: build },
     windowsHide: true,
   });
   child.unref();

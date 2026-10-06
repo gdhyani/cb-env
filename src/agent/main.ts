@@ -66,6 +66,7 @@ function onClient(socket: net.Socket) {
           type: "status",
           pid: process.pid,
           version: AGENT_VERSION,
+          build: process.env[ENV.agentBuild],
           uptimeMs: Date.now() - startedAt,
           sessions: [...sessions.values()].map((s) => s.summary()),
         });
@@ -112,7 +113,7 @@ function onClient(socket: net.Socket) {
         });
         return;
       }
-      session.attach(socket, req.webhookPort);
+      session.attach(socket, req.webhookPort, req.detectPort);
       attached.add(session);
       log(`client attached to ${session.label} (${session.clients.size} client(s))`);
       void heartbeat();
