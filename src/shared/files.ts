@@ -25,3 +25,17 @@ export function writeJsonAtomicSync(file: string, data: unknown, mode = 0o600): 
   fs.writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, { mode });
   fs.renameSync(tmp, file);
 }
+
+/**
+ * P10 (S1): opens a file that holds cb's own output (agent log, lock) privately — folder 0700, file 0600 — and tightens
+ * one left from an older version. Returns the fd.
+ */
+export function openPrivate(file: string, flags: "a" | "wx"): number {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const fd = fs.openSync(file, flags, 0o600);
+  if (process.platform !== "win32") {
+    fs.fchmodSync(fd, 0o600);
+    fs.chmodSync(path.dirname(file), 0o700);
+  }
+  return fd;
+}

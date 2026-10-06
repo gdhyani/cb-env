@@ -7,6 +7,7 @@ import { AgentRequestSchema, readLines, writeLine } from "../shared/agent-ipc";
 import { newCorrelationId } from "../shared/correlation";
 import { getServerCredentials } from "../shared/credentials";
 import { CbError } from "../shared/errors";
+import { openPrivate } from "../shared/files";
 import { createBackendClient } from "../shared/http";
 import { agentLogPath, agentSocketPath } from "../shared/paths";
 import { redact } from "../shared/redact";
@@ -24,7 +25,12 @@ const MAX_LOG_BYTES = 5 * 1024 * 1024;
 function log(line: string) {
   try {
     if (fs.existsSync(logFile) && fs.statSync(logFile).size > MAX_LOG_BYTES) fs.renameSync(logFile, `${logFile}.1`);
-    fs.appendFileSync(logFile, `${new Date().toISOString()} ${redact(line)}\n`);
+    const fd = openPrivate(logFile, "a");
+    try {
+      fs.appendFileSync(fd, `${new Date().toISOString()} ${redact(line)}\n`);
+    } finally {
+      fs.closeSync(fd);
+    }
   } catch {
     // Logging must never take the agent down.
   }

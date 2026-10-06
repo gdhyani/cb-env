@@ -2,6 +2,7 @@
 const PATTERNS: [RegExp, string][] = [
   [/(authorization["']?\s*[:=]\s*["']?)(bearer|basic)\s+[^\s"',]+/gi, "$1$2 [redacted]"],
   [/\bbearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "Bearer [redacted]"],
+  [/\bbasic\s+[A-Za-z0-9+/=]{8,}/gi, "Basic [redacted]"],
   // cb device tokens and other long token-like runs (32+ url-safe characters).
   [/\bcbd_[A-Za-z0-9_-]+/g, "cbd_[redacted]"],
   [/\b[A-Za-z0-9_-]{32,}\b/g, "[redacted]"],

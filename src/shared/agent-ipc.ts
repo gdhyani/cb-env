@@ -4,6 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import { z } from "zod";
 import { AGENT_START_TIMEOUT_MS, AGENT_VERSION, ENV } from "../constants";
+import { openPrivate } from "./files";
 import { agentLogPath, agentSocketPath } from "./paths";
 
 /** CLI → agent requests (newline-delimited JSON over the control socket). */
@@ -203,8 +204,7 @@ export async function ensureAgent(env: NodeJS.ProcessEnv = process.env): Promise
     while (Date.now() < gone && (await probe(env))) await new Promise((r) => setTimeout(r, 100));
   }
   const log = agentLogPath(env);
-  fs.mkdirSync(path.dirname(log), { recursive: true });
-  const out = fs.openSync(log, "a");
+  const out = openPrivate(log, "a");
   const child = spawn(process.execPath, [agentEntry()], {
     detached: true,
     stdio: ["ignore", out, out],
