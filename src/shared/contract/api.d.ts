@@ -1829,6 +1829,8 @@ export interface components {
             extraHeaders?: {
                 [key: string]: string;
             };
+            /** @description Requests that carry another key (a public/publishable key) or none go through unchanged, never with the real key added; a cb stand-in that is not the device's own is still refused (Supabase preset). In every case the device's own stand-in is replaced by the real key in every header that carries it. */
+            passOtherKeys?: boolean;
         };
         CreateAwsResource: {
             /**
@@ -1941,6 +1943,8 @@ export interface components {
             extraHeaders?: {
                 [key: string]: string;
             };
+            /** @description API services — let other (public) keys through unchanged. */
+            passOtherKeys?: boolean;
             /** @description Webhook services — replace the real signing secret (device fakes stay the same). */
             signingSecret?: string;
             /** @description Stripe webhooks — set or replace the thin destination's signing secret (the other secret is kept). */
