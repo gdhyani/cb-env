@@ -205,7 +205,9 @@ export async function ensureAgent(env: NodeJS.ProcessEnv = process.env): Promise
   }
   const log = agentLogPath(env);
   const out = openPrivate(log, "a");
-  const child = spawn(process.execPath, [agentEntry()], {
+  // P5: no other local process may open a debugger in the agent (it holds this device's tokens) with SIGUSR1.
+  const noDebugger = process.allowedNodeEnvironmentFlags.has("--disable-sigusr1") ? ["--disable-sigusr1"] : [];
+  const child = spawn(process.execPath, [...noDebugger, agentEntry()], {
     detached: true,
     stdio: ["ignore", out, out],
     env: { ...env, CB_AGENT_VERSION: AGENT_VERSION, [ENV.agentBuild]: build },

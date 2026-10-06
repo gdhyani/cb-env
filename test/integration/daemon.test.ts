@@ -356,3 +356,21 @@ describe("what the agent exposes on this laptop (P8, P9, P10, S6)", () => {
     conn.close();
   });
 });
+
+describe("the agent can't be debugged by another local process (P5)", () => {
+  it("P5 SIGUSR1 does not open a debugger in the agent, and the agent keeps running", async () => {
+    if (process.platform === "win32") return; // no SIGUSR1 on Windows
+    const { env } = await setup();
+    const conn = await ipc.ensureAgent(env);
+    conn.send({ type: "status" });
+    const status = await conn.next("status");
+    if (status.type !== "status") throw new Error("no status");
+    process.kill(status.pid, "SIGUSR1");
+    await new Promise((r) => setTimeout(r, 800));
+    expect(fs.readFileSync(agentLogPath(env), "utf8")).not.toMatch(/Debugger listening/);
+    conn.send({ type: "status" });
+    const after = await conn.next("status");
+    expect(after.type === "status" && after.pid).toBe(status.pid);
+    conn.close();
+  });
+});
