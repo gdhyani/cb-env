@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import type net from "node:net";
@@ -298,4 +299,51 @@ describe("FR-WH-003 agent delivers webhooks to the app run with cb (daemon)", ()
     expect(log.match(/client attached/g)).toHaveLength(1);
     conn.close();
   });
+
+  it("FR-WH-003 cb run delivers to the port the app really listens on — no PORT, no setting", async () => {
+    const { backend, env } = await setup();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cbw-app-"));
+    fs.mkdirSync(path.join(dir, ".cb"));
+    fs.writeFileSync(
+      path.join(dir, ".cb", "project.json"),
+      JSON.stringify({ server: backend.url, orgId: "o", projectId: "p1", defaultEnvironment: "development" }),
+    );
+    const received = path.join(dir, "received.txt");
+    const portFile = path.join(dir, "port.txt");
+    // The app picks its own port (not PORT, not 3000) and writes every webhook body it gets.
+    fs.writeFileSync(
+      path.join(dir, "app.js"),
+      `const http = require("node:http"); const fs = require("node:fs");
+       const probe = http.createServer().listen(0, () => { const p = probe.address().port; probe.close(() => {
+         http.createServer((req, res) => { let b = ""; req.on("data", (c) => (b += c));
+           req.on("end", () => { fs.appendFileSync(${JSON.stringify(received)}, req.url + " " + b + "\\n"); res.end("ok"); });
+         }).listen(p, "127.0.0.1", () => fs.writeFileSync(${JSON.stringify(portFile)}, String(p)));
+       }); });`,
+    );
+    const noPort: NodeJS.ProcessEnv = { ...env };
+    delete noPort.PORT;
+    const run = spawn(process.execPath, [path.resolve("dist/cli/index.js"), "run", "--", process.execPath, "app.js"], {
+      cwd: dir,
+      env: noPort,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let out = "";
+    run.stdout.on("data", (d: Buffer) => {
+      out += d.toString();
+    });
+    run.stderr.on("data", (d: Buffer) => {
+      out += d.toString();
+    });
+    cleanups.push(() => {
+      run.kill("SIGTERM");
+    });
+    await until(() => fs.existsSync(portFile) && backend.openStreams() > 0, 20_000);
+    const port = Number(fs.readFileSync(portFile, "utf8"));
+    expect(port).not.toBe(3000);
+    await until(() => out.includes(`webhooks → 127.0.0.1:${port}`), 10_000);
+    backend.deliver(push(501));
+    await until(() => backend.acks.has("del_501"), 10_000);
+    expect(fs.readFileSync(received, "utf8")).toContain('/api/webhooks/stripe {"id":"evt_501","n":501}');
+    expect(backend.acks.get("del_501")).toMatchObject({ ok: true, status: 200 });
+  }, 40_000);
 });

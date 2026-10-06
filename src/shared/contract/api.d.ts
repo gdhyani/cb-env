@@ -184,6 +184,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/webhook-events/{eventId}/send-to-me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send an event to the caller's own signed-in machines (admin; events nobody owns, e.g. dashboard tests) */
+        post: operations["sendWebhookEventToMe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/resources/{resourceId}/webhook/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create (or point again) the Stripe webhook endpoint with the environment's stored Stripe key (admin)
+         * @description Uses the Stripe secret key stored in the same environment to create an all-events webhook endpoint at this service's webhookUrl; the signing secret Stripe returns is stored and never shown. Connecting again updates the endpoint's URL and keeps its secret.
+         */
+        post: operations["connectStripeWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/webhook-events/{eventId}/replay": {
         parameters: {
             query?: never;
@@ -1435,9 +1472,11 @@ export interface components {
             createdAt: string;
             /**
              * Format: uri
-             * @description Webhook services only — paste into the provider's webhook settings (PUBLIC_URL + /api/hooks/{id}).
+             * @description Webhook services only — paste into the provider's webhook settings (PUBLIC_URL + /api/hooks/{id}). Stripe's snapshot and thin destinations both use this one URL.
              */
             webhookUrl?: string;
+            /** @description Razorpay webhooks only, in the create or regenerate answer only — the signing secret cb generated, to paste into Razorpay once. Never returned again. */
+            generatedSecret?: string;
         };
         Profile: {
             name: string;
@@ -1886,10 +1925,14 @@ export interface components {
              * @example /api/webhooks/stripe
              */
             path: string;
-            /** @description Default app port when the developer's run does not tell the agent one. */
+            /** @description Deprecated — the agent detects the port the app listens on. Last fallback only. */
             port?: number;
-            /** @description Real signing secret (Stripe whsec_…, Razorpay webhook secret). */
-            signingSecret: string;
+            /** @description Real signing secret (Stripe whsec_…, Razorpay webhook secret). Optional — Stripe gets it from Connect; Razorpay's is generated when left out (returned once as generatedSecret). */
+            signingSecret?: string;
+            /** @description Stripe only — the thin-payload destination's signing secret (whsec_…); same cb URL. */
+            thinSigningSecret?: string;
+            /** @description Stripe only — path for thin events when the app has a separate route (default path). */
+            thinPath?: string;
         };
         CreateResourceBody: components["schemas"]["CreatePostgresResource"] | components["schemas"]["CreateMysqlResource"] | components["schemas"]["CreateMongodbResource"] | components["schemas"]["CreateRedisResource"] | components["schemas"]["CreateSmtpResource"] | components["schemas"]["CreateHttpResource"] | components["schemas"]["CreateOauthResource"] | components["schemas"]["CreateAwsResource"] | components["schemas"]["CreateGoogleSaResource"] | components["schemas"]["CreateApnsResource"] | components["schemas"]["CreateWebhookResource"];
         /** @description All fields optional; fields that do not apply to the resource's kind are ignored. */
@@ -1900,6 +1943,15 @@ export interface components {
             };
             /** @description Webhook services — replace the real signing secret (device fakes stay the same). */
             signingSecret?: string;
+            /** @description Stripe webhooks — set or replace the thin destination's signing secret (the other secret is kept). */
+            thinSigningSecret?: string;
+            /** @description Stripe webhooks — path for thin events; null sends them to path again. */
+            thinPath?: string | null;
+            /**
+             * @description Razorpay webhooks — replace the signing secret with a new generated one (returned once as generatedSecret).
+             * @constant
+             */
+            regenerateSecret?: true;
             /** @description Webhook services — path in the app the agent posts to. */
             path?: string;
             /** @description Webhook services — default app port; null clears it. */
@@ -2660,6 +2712,71 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    sendWebhookEventToMe: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+            };
+            path: {
+                eventId: components["schemas"]["ObjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: {
+                            queued: number;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    connectStripeWebhook: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+            };
+            path: {
+                resourceId: components["schemas"]["ObjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: components["schemas"]["Resource"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ServiceTestFailed"];
         };
     };
     replayWebhookEvent: {

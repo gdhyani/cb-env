@@ -8,6 +8,7 @@ import { readSnapshotSync } from "../../register/snapshot";
 import { type AgentConnection, ensureAgent, type SessionSummary } from "../../shared/agent-ipc";
 import { requireServerCredentials } from "../../shared/credentials";
 import { CbError } from "../../shared/errors";
+import { watchListenFile } from "../../shared/listen-file";
 import { requireProjectConfig } from "../../shared/project-config";
 import type { Snapshot } from "../../shared/schemas";
 import { loadState } from "../../shared/state";
@@ -33,18 +34,21 @@ export function buildChildEnv(
   snapshot: Snapshot,
   snapshotFile: string,
   register = registerPath(),
+  listenFile?: string,
 ): NodeJS.ProcessEnv {
   return {
     ...parent,
     ...snapshot.env,
     [ENV.snapshot]: snapshotFile,
+    ...(listenFile ? { [ENV.listenFile]: listenFile } : {}),
     NODE_OPTIONS: appendNodeOption(parent.NODE_OPTIONS, `--require ${quoteNodeOption(register)}`),
   };
 }
 
 /**
- * FR-WH-003: the port webhooks are delivered to — `--webhook-port`, then `.cb/project.json` webhookPort, then the
- * PORT the app will see (shell or cb variable). Undefined lets the service's default (or 3000) apply.
+ * FR-WH-003: the port webhooks go to before the app has started listening — `--webhook-port`, then
+ * `.cb/project.json` webhookPort, then the PORT the app will see. Once the app listens, the port it really opened
+ * replaces this (detected by the preload), unless `--webhook-port` was given.
  */
 export function resolveWebhookPort(
   flag: string | undefined,
@@ -115,7 +119,7 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
     ...parentEnv,
     ...readSnapshotSync(snapshotFile).env,
   });
-  const request = { ...base, webhookPort };
+  const request: typeof base & { webhookPort?: number } = { ...base, webhookPort };
   if (webhookPort !== undefined && webhookPort !== shellPort) conn.send({ type: "webhook-port", ...base, webhookPort });
   // J7: while access is revoked or stopped, refuse to start (the preload would fail closed anyway).
   if (summary.revoked) {
@@ -123,6 +127,25 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
     conn.close();
     throw new CbError("ACCESS_REVOKED", MSG.revoked(reason));
   }
+  // FR-WH-003: follow the port the app really listens on (changes with it); --webhook-port or a project webhookPort
+  // turns it off. Started after the revoked check so a refused run leaves nothing behind.
+  const listenFile =
+    opts.webhookPort === undefined && config.webhookPort === undefined
+      ? `${snapshotFile}.${process.pid}.listen`
+      : undefined;
+  const listenWatch = listenFile
+    ? watchListenFile(
+        listenFile,
+        (port) => {
+          if (port === request.webhookPort) return;
+          request.webhookPort = port;
+          conn.send({ type: "webhook-port", ...base, webhookPort: port });
+          note(`cb: webhooks → 127.0.0.1:${port} (the port your app listens on)`);
+        },
+        undefined,
+        resolveWebhookPort(undefined, undefined, { ...parentEnv, ...readSnapshotSync(snapshotFile).env }),
+      )
+    : undefined;
   note(
     `cb: ${config.projectSlug ?? config.projectId} / ${environment} — ${summary.listeners} brokered connection(s), ${summary.redirects} redirected host(s)`,
   );
@@ -182,7 +205,7 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
       child = spawn(file, args, {
         stdio: "inherit",
         cwd: opts.cwd,
-        env: buildChildEnv(parentEnv, snapshot, snapshotFile),
+        env: buildChildEnv(parentEnv, snapshot, snapshotFile, registerPath(), listenFile),
       });
       const code = await new Promise<number>((resolve, reject) => {
         child?.on("error", reject);
@@ -197,6 +220,7 @@ export async function runCommand(cmd: string[], opts: RunOptions = {}): Promise<
   } finally {
     finished = true;
     clearInterval(health);
+    listenWatch?.close();
     conn.close();
     process.off("SIGINT", onSigint);
     process.off("SIGTERM", onSigterm);
@@ -211,7 +235,7 @@ export function registerRunCommand(program: Command): void {
     .option("--env <name>", "environment (default: project default or `cb env use`)")
     .option("--server <url>", "backend URL")
     .option("--no-restart", "do not restart the app when configuration changes")
-    .option("--webhook-port <port>", "port your app listens on for webhooks cb delivers (default: PORT, then 3000)")
+    .option("--webhook-port <port>", "deliver webhooks to this port (default: the port your app listens on, detected)")
     .argument("<cmd...>", "command to run, after --")
     .passThroughOptions()
     .action(async (cmd: string[], opts: { env?: string; server?: string; restart: boolean; webhookPort?: string }) => {
