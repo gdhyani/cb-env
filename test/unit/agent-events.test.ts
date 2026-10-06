@@ -60,6 +60,8 @@ describe("FR-AGT-006 event stream that survives days (watchdog, wake, token, web
     const events: AgentEvent[] = [];
     subscribe(server.url, events);
     await until(() => server.connections() >= 3);
+    // The server counts a connection on arrival; the client sees its "ready" a moment later (slow CI).
+    await until(() => events.filter((e) => e.type === "ready").length >= 3);
     expect(events.filter((e) => e.type === "ready").length).toBeGreaterThanOrEqual(3);
   });
 
