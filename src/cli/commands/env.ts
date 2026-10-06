@@ -37,7 +37,7 @@ export function registerEnvCommands(program: Command): void {
     .option("--json", "print JSON")
     .action(async (opts: { env?: string; json?: boolean }) => {
       const { config } = requireProjectConfig();
-      const server = resolveServer(config.server);
+      const server = resolveServer(undefined, config.server);
       await requireServerCredentials(server);
       const environment = await resolveEnvironmentName(
         config.projectId,

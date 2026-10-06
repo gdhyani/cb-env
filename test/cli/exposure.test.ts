@@ -100,3 +100,33 @@ describe("CLI surfaces never show a token or a value (K6, F1, F10)", () => {
     expect(r.output).not.toContain(TOKEN);
   });
 });
+
+describe("server precedence (FR-PKG-001)", () => {
+  it("cb env print honours CB_SERVER_URL over .cb/project.json, like every other command", async () => {
+    const home = tmp("cb-srv-home-");
+    const dir = tmp("cb-srv-app-");
+    stub = await startStubServer({});
+    await login(stub.url, home);
+    fs.mkdirSync(path.join(dir, ".cb"));
+    fs.writeFileSync(
+      path.join(dir, ".cb", "project.json"),
+      JSON.stringify({ server: "http://127.0.0.1:9", orgId: "o", projectId: "p1", defaultEnvironment: "development" }),
+    );
+    const r = await new Promise<{ output: string }>((resolve) => {
+      const child = spawn(process.execPath, [BIN, "env", "print"], {
+        env: { PATH: process.env.PATH, CB_HOME: home, CB_CREDENTIAL_STORE: "file", CB_SERVER_URL: stub?.url },
+        cwd: dir,
+      });
+      let output = "";
+      child.stdout.on("data", (d: Buffer) => {
+        output += d.toString();
+      });
+      child.stderr.on("data", (d: Buffer) => {
+        output += d.toString();
+      });
+      child.on("close", () => resolve({ output }));
+    });
+    expect(r.output).not.toMatch(/not logged in/);
+    expect(stub.seen.length).toBeGreaterThan(0);
+  });
+});
