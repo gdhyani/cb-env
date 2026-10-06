@@ -207,10 +207,12 @@ export async function ensureAgent(env: NodeJS.ProcessEnv = process.env): Promise
   const out = openPrivate(log, "a");
   // P5: no other local process may open a debugger in the agent (it holds this device's tokens) with SIGUSR1.
   const noDebugger = process.allowedNodeEnvironmentFlags.has("--disable-sigusr1") ? ["--disable-sigusr1"] : [];
+  // An inherited NODE_OPTIONS (--inspect, --require …) would open a debugger or run foreign code in the agent.
+  const { NODE_OPTIONS: _ignored, ...agentEnv } = env;
   const child = spawn(process.execPath, [...noDebugger, agentEntry()], {
     detached: true,
     stdio: ["ignore", out, out],
-    env: { ...env, CB_AGENT_VERSION: AGENT_VERSION, [ENV.agentBuild]: build },
+    env: { ...agentEnv, CB_AGENT_VERSION: AGENT_VERSION, [ENV.agentBuild]: build },
     windowsHide: true,
   });
   child.unref();

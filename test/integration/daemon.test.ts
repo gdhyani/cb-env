@@ -373,4 +373,16 @@ describe("the agent can't be debugged by another local process (P5)", () => {
     expect(after.type === "status" && after.pid).toBe(status.pid);
     conn.close();
   });
+  it("P5 an inherited NODE_OPTIONS (--inspect, --require) never reaches the agent", async () => {
+    const { env } = await setup();
+    const preload = path.join(os.tmpdir(), `cb-p5-preload-${process.pid}.cjs`);
+    fs.writeFileSync(preload, "process.stderr.write('PRELOAD-RAN\\n');");
+    const conn = await ipc.ensureAgent({ ...env, NODE_OPTIONS: `--inspect=127.0.0.1:0 --require ${preload}` });
+    await new Promise((r) => setTimeout(r, 500));
+    const log = fs.readFileSync(agentLogPath(env), "utf8");
+    expect(log).not.toMatch(/Debugger listening|inspector/i);
+    expect(log).not.toContain("PRELOAD-RAN");
+    conn.close();
+    fs.rmSync(preload, { force: true });
+  });
 });
