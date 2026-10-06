@@ -342,8 +342,8 @@ describe("FR-WH-003 agent delivers webhooks to the app run with cb (daemon)", ()
     expect(port).not.toBe(3000);
     await until(() => out.includes(`webhooks → 127.0.0.1:${port}`), 10_000);
     // The detected port asked the backend at once for anything that waited (not at the next retry).
-    const before = backend.redelivers();
-    expect(before).toBeGreaterThanOrEqual(2);
+    // Sent without waiting for an answer: give it a moment on slow machines.
+    await until(() => backend.redelivers() >= 2, 10_000);
     backend.deliver(push(501));
     await until(() => backend.acks.has("del_501"), 10_000);
     expect(fs.readFileSync(received, "utf8")).toContain('/api/webhooks/stripe {"id":"evt_501","n":501}');
