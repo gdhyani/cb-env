@@ -6,6 +6,8 @@ export const PORT_RANGE = { min: 7400, max: 7999 } as const;
 export const CORRELATION_HEADER = "x-correlation-id";
 export const REQUEST_TIMEOUT_MS = 10_000;
 export const AGENT_VERSION = "0.0.0";
+/** M12: lowest supported Node (package.json engines); 22.14 added --disable-sigusr1, which the agent needs (P5). */
+export const MIN_NODE_VERSION = "22.14";
 export const PROJECT_DIR = ".cb";
 export const PROJECT_FILE = "project.json";
 export const RESTART_DEBOUNCE_MS = 1_000;

@@ -89,7 +89,7 @@ cb-env/
 
 `package.json` essentials (PRD §9.1): `"name": "@cb/env"`, `"bin": { "cb": "./dist/cli/index.js" }`,
 exports `"."` → `{ browser: ./dist/api/browser-stub.js, default: ./dist/api/index.js }`,
-`"./register"` → `./dist/register/index.js`, `"engines": { "node": ">=22" }`.
+`"./register"` → `./dist/register/index.js`, `"engines": { "node": ">=22.14" }` (22.14 added `--disable-sigusr1`, P5).
 Ship both CJS and ESM consumers' needs: the register entry must work under `--require`.
 
 ## Tools

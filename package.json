@@ -12,7 +12,7 @@
     "NOTICE"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.14"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

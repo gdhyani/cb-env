@@ -3,9 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { env } from "../../src/api";
-import { envFiles, scanEnvFiles } from "../../src/cli/commands/doctor";
+import { envFiles, nodeCheck, scanEnvFiles } from "../../src/cli/commands/doctor";
 import { promptEnv } from "../../src/cli/commands/shell";
 import { renderEnvTypes } from "../../src/cli/commands/types";
+import { supportsNoDebuggerFlag } from "../../src/shared/agent-ipc";
 import { runNode } from "../helpers/run-node";
 
 const saved = { ...process.env };
@@ -111,5 +112,23 @@ describe("cb up / down / doctor (FR-PKG-011, FR-PKG-012)", () => {
     expect(report.ok).toBe(false);
     expect(report.checks.find((c: { name: string }) => c.name === "Server").status).toBe("fail");
     expect(report.checks.find((c: { name: string }) => c.name === "Node.js").status).toBe("ok");
+  });
+});
+
+describe("cb doctor Node.js check (M12, P5)", () => {
+  it("M12 P5 doctor warns when this Node can't keep debuggers out of the agent (--disable-sigusr1, Node 22.14+)", () => {
+    const old = nodeCheck("v22.13.1", false);
+    expect(old.status).toBe("warn");
+    expect(old.detail).toContain("v22.13.1");
+    expect(old.detail).toMatch(/debugger/i);
+    expect(old.fix).toMatch(/22\.14/);
+    expect(nodeCheck("v22.14.0", true)).toEqual({ name: "Node.js", status: "ok", detail: "v22.14.0" });
+    expect(nodeCheck("v20.18.0", false).status).toBe("fail");
+  });
+
+  it("M12 the flag check reads Node's own list of allowed flags", () => {
+    expect(supportsNoDebuggerFlag(new Set(["--disable-sigusr1"]))).toBe(true);
+    expect(supportsNoDebuggerFlag(new Set(["--inspect"]))).toBe(false);
+    expect(supportsNoDebuggerFlag()).toBe(process.allowedNodeEnvironmentFlags.has("--disable-sigusr1"));
   });
 });

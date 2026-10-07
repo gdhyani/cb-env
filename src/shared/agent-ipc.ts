@@ -186,6 +186,11 @@ async function probe(env: NodeJS.ProcessEnv): Promise<boolean> {
   return Boolean(conn);
 }
 
+/** M12 / P5: whether this Node accepts --disable-sigusr1 (added in Node 22.14.0); older 22.x would drop it silently. */
+export function supportsNoDebuggerFlag(flags: ReadonlySet<string> = process.allowedNodeEnvironmentFlags): boolean {
+  return flags.has("--disable-sigusr1");
+}
+
 /**
  * FR-AGT-001/007: connect to the agent, starting it detached (own process group, output to the agent log)
  * when it isn't running. A concurrent start by another `cb run` is fine: the loser exits on the single-instance lock.
@@ -206,7 +211,7 @@ export async function ensureAgent(env: NodeJS.ProcessEnv = process.env): Promise
   const log = agentLogPath(env);
   const out = openPrivate(log, "a");
   // P5: no other local process may open a debugger in the agent (it holds this device's tokens) with SIGUSR1.
-  const noDebugger = process.allowedNodeEnvironmentFlags.has("--disable-sigusr1") ? ["--disable-sigusr1"] : [];
+  const noDebugger = supportsNoDebuggerFlag() ? ["--disable-sigusr1"] : [];
   // An inherited NODE_OPTIONS (--inspect, --require …) would open a debugger or run foreign code in the agent.
   const { NODE_OPTIONS: _ignored, ...agentEnv } = env;
   const child = spawn(process.execPath, [...noDebugger, agentEntry()], {
