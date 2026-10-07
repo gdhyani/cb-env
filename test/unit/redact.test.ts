@@ -17,4 +17,12 @@ describe("log redaction (S9, FR-AGT-008)", () => {
   it("S9 leaves ordinary log text alone", () => {
     expect(redact("attached shop/development on 127.0.0.1:7401")).toBe("attached shop/development on 127.0.0.1:7401");
   });
+
+  it("M8 S9 bare Basic redacts base64 credentials but leaves prose like 'Basic configuration' alone", () => {
+    expect(redact("Basic configuration loaded")).toBe("Basic configuration loaded");
+    expect(redact("basic Settings and Basic authentication")).toBe("basic Settings and Basic authentication");
+    expect(redact("Basic dXNlcjpwYXNz")).toBe("Basic [redacted]");
+    expect(redact("sent Basic YWxhZGRpbjpvcGVuc2VzYW1l to upstream")).toBe("sent Basic [redacted] to upstream");
+    expect(redact("Basic YTpi")).toBe("Basic [redacted]"); // a:b, the shortest real credential
+  });
 });
