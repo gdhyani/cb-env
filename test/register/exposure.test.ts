@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { quoteNodeOption } from "../../src/cli/commands/run";
 import { REGISTER, runNode, writeSnapshot } from "../helpers/run-node";
 
 /**
@@ -12,7 +13,8 @@ import { REGISTER, runNode, writeSnapshot } from "../helpers/run-node";
  */
 const STANDIN = "sk_test_cbSTANDIN0000000000000000000000000001";
 const snapshot = () => writeSnapshot({ env: { STRIPE_SECRET_KEY: STANDIN, PORT: "3000" }, visibleKeys: [] });
-const nodeOptions = `--require "${REGISTER}"`;
+// Quoted the way cb run does it: Node reads backslashes in NODE_OPTIONS as escapes, which breaks Windows paths.
+const nodeOptions = `--require ${quoteNodeOption(REGISTER)}`;
 const hasPython = spawnSync("python3", ["-c", "0"]).status === 0;
 
 /** Runs `code` the way cb run starts an app: snapshot path + NODE_OPTIONS preload, nothing else. */
