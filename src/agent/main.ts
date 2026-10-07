@@ -7,6 +7,7 @@ import { AgentRequestSchema, readLines, writeLine } from "../shared/agent-ipc";
 import { newCorrelationId } from "../shared/correlation";
 import { getServerCredentials } from "../shared/credentials";
 import { CbError } from "../shared/errors";
+import { createLogWriter } from "../shared/files";
 import { createBackendClient } from "../shared/http";
 import { agentLogPath, agentSocketPath } from "../shared/paths";
 import { redact } from "../shared/redact";
@@ -20,11 +21,11 @@ const idleMs = Number(env[ENV.agentIdleMs] ?? AGENT_IDLE_MS);
 const startedAt = Date.now();
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
 
-/** FR-AGT-008: one line per event, tokens redacted; rotated to agent.log.1 past 5 MB. */
+/** FR-AGT-008: one line per event, tokens redacted; rotated to agent.log.1 past 5 MB. One handle (M7). */
+const logWriter = createLogWriter(logFile, MAX_LOG_BYTES);
 function log(line: string) {
   try {
-    if (fs.existsSync(logFile) && fs.statSync(logFile).size > MAX_LOG_BYTES) fs.renameSync(logFile, `${logFile}.1`);
-    fs.appendFileSync(logFile, `${new Date().toISOString()} ${redact(line)}\n`);
+    logWriter.write(`${new Date().toISOString()} ${redact(line)}`);
   } catch {
     // Logging must never take the agent down.
   }

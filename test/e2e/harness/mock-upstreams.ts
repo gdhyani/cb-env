@@ -147,6 +147,8 @@ export async function startMockUpstreams(c: Canaries, tls: { certPem: string; ke
       // A misbehaving provider echoing the real key: FR-GW-006 must redact it before the app sees it.
       const key = bearer(req);
       if (key !== c.stripe) return deny(res, key);
+      // N3: some providers echo it in a header too.
+      res.setHeader("x-echo-key", key);
       json(res, 200, { youSent: key, inBase64: Buffer.from(key).toString("base64") });
     },
   };

@@ -89,7 +89,7 @@ route("/apns", async () => {
 });
 route("/leak", async () => {
   const res = await fetch(`${env.LEAK_BASE_URL}/echo`, { headers: { authorization: `Bearer ${env.LEAK_API_KEY}` } });
-  return res.text();
+  return { headers: Object.fromEntries(res.headers), body: await res.text() };
 });
 
 // Razorpay webhooks, verified the usual way with the official SDK and the env var — cb delivers them re-signed for

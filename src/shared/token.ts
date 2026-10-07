@@ -5,6 +5,7 @@ import { MSG } from "../constants";
 import { newCorrelationId } from "./correlation";
 import { requireServerCredentials, saveServerCredentials } from "./credentials";
 import { CbError } from "./errors";
+import { openPrivate } from "./files";
 import { createBackendClient } from "./http";
 import { cbHome } from "./paths";
 
@@ -30,11 +31,10 @@ const fresh = (c: { accessToken?: string; accessTokenExpiresAt?: string }) =>
  */
 async function withLock<T>(env: NodeJS.ProcessEnv, fn: () => Promise<T>): Promise<T> {
   const file = path.join(cbHome(env), "token.lock");
-  fs.mkdirSync(path.dirname(file), { recursive: true });
   const deadline = Date.now() + LOCK_WAIT_MS;
   for (;;) {
     try {
-      fs.closeSync(fs.openSync(file, "wx"));
+      fs.closeSync(openPrivate(file, "wx"));
       break;
     } catch {
       // A crashed holder leaves the file behind; take over once it is clearly stale.

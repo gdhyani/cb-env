@@ -3,7 +3,8 @@ import net from "node:net";
 import path from "node:path";
 import type { Command } from "commander";
 import { z } from "zod";
-import { connectAgent } from "../../shared/agent-ipc";
+import { MIN_NODE_VERSION } from "../../constants";
+import { connectAgent, supportsNoDebuggerFlag } from "../../shared/agent-ipc";
 import { getServerCredentials } from "../../shared/credentials";
 import { readJsonFile } from "../../shared/files";
 import { createBackendClient } from "../../shared/http";
@@ -86,15 +87,28 @@ const portFree = (port: number) =>
     s.listen(port, "127.0.0.1", () => s.close(() => resolve(true)));
   });
 
+/**
+ * M12 / P5: Node 22 is the floor; Node 22.14+ is needed so the agent starts with --disable-sigusr1 and no other local
+ * process can open a debugger in it (older Node drops the flag silently).
+ */
+export function nodeCheck(version: string, supportsNoDebugger: boolean): Check {
+  const major = Number(version.replace(/^v/, "").split(".")[0]);
+  if (major < 22)
+    return { name: "Node.js", status: "fail", detail: version, fix: `Install Node.js ${MIN_NODE_VERSION} or newer.` };
+  if (!supportsNoDebugger)
+    return {
+      name: "Node.js",
+      status: "warn",
+      detail: `${version} can't stop other local programs from attaching a debugger to the cb agent`,
+      fix: `Upgrade to Node.js ${MIN_NODE_VERSION} or newer (the agent needs --disable-sigusr1).`,
+    };
+  return { name: "Node.js", status: "ok", detail: version };
+}
+
 /** All checks; never throws (each failure becomes a check). */
 export async function runDoctor(serverFlag?: string): Promise<Check[]> {
   const checks: Check[] = [];
-  const major = Number(process.versions.node.split(".")[0]);
-  checks.push(
-    major >= 22
-      ? { name: "Node.js", status: "ok", detail: process.version }
-      : { name: "Node.js", status: "fail", detail: process.version, fix: "Install Node.js 22 or newer." },
-  );
+  checks.push(nodeCheck(process.version, supportsNoDebuggerFlag()));
 
   const found = findProjectConfig();
   const server = resolveServer(serverFlag);

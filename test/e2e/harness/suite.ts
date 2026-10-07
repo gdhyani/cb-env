@@ -29,11 +29,26 @@ export interface Suite {
 }
 
 /** One isolated cb world per e2e file: canaries, mocks, upstream MongoDB, backend DB and backend. */
+/** M4 / F1: the app's own cb folder (project link, env.d.ts) and any .env* file in it (only targets that exist). */
+function appTargets(dir: string | undefined): Record<string, string[]> {
+  if (!dir) return {};
+  const out: Record<string, string[]> = {};
+  const cbDir = listFiles(path.join(dir, ".cb"));
+  if (cbDir.length) out["app .cb folder"] = cbDir;
+  const envs = fs
+    .readdirSync(dir)
+    .filter((f) => f.startsWith(".env"))
+    .map((f) => path.join(dir, f));
+  if (envs.length) out["app .env files"] = envs;
+  return out;
+}
+
 export async function startSuite(name: string, opts: { mongo?: boolean } = {}): Promise<Suite> {
   const cfg = loadHarnessConfig();
   const evidence = path.join(cfg.evidenceRoot, `${name}-${Date.now()}`);
   fs.mkdirSync(evidence, { recursive: true });
   const cbHome = path.join(evidence, "cbhome");
+  let appDir: string | undefined;
   const canaries = makeCanaries();
   const tls = await testTls(path.join(evidence, "tls"));
   const mocks = await startMockUpstreams(canaries, tls.leaf);
@@ -70,6 +85,7 @@ export async function startSuite(name: string, opts: { mongo?: boolean } = {}): 
       const seeded = await seedProject(backend.url, spec);
       await loginCli(cfg, seeded, cbHome);
       linkProject(exampleDir, seeded);
+      appDir = exampleDir;
       suite.seeded = seeded;
       return seeded;
     },
@@ -94,6 +110,7 @@ export async function startSuite(name: string, opts: { mongo?: boolean } = {}): 
         "backend log": [path.join(evidence, "backend.log")],
         "cb CLI output": [path.join(evidence, "cli.log")],
         "responses delivered to the app": inEvidence(/^response\..+\.json$/),
+        ...appTargets(appDir),
         ...extraTargets,
       });
     },

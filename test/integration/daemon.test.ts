@@ -248,3 +248,161 @@ describe("background agent daemon (FR-AGT-001, FR-AGT-006, FR-AGT-007)", () => {
     await third.next("stopping");
   });
 });
+
+/** Raw IPC from another local process: newline-delimited JSON, as any program on the laptop could send it. */
+function rawIpc(env: NodeJS.ProcessEnv) {
+  const sock = net.connect(agentSocketPath(env));
+  let buf = "";
+  sock.on("data", (d) => {
+    buf += d.toString();
+  });
+  return {
+    ready: new Promise((r) => sock.once("connect", r)),
+    send: (line: string) => sock.write(`${line}\n`),
+    read: async (ms = 800) => {
+      await new Promise((r) => setTimeout(r, ms));
+      return buf;
+    },
+    close: () => sock.destroy(),
+  };
+}
+
+describe("what the agent exposes on this laptop (P8, P9, P10, S6)", () => {
+  it("P10 every file under CB_HOME is private (files 0600, folders 0700)", async () => {
+    if (process.platform === "win32") return; // ACLs on Windows (§9.7)
+    const { backend, env: base } = await setup();
+    // A CB_HOME that cb itself has to create (mkdtemp would already make it 0700).
+    const home = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "cbd-p10-")), "home");
+    const env = { ...base, CB_HOME: home };
+    await saveServerCredentials(
+      backend.url,
+      {
+        token: "cbr_refresh_token_for_daemon_test_000000",
+        accessToken: TOKEN,
+        accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        deviceId: "d1",
+        deviceName: "test",
+        user: { id: "u", name: "U", email: "u@x" },
+      },
+      env,
+    );
+    const conn = await ipc.ensureAgent(env);
+    cleanups.push(() => {
+      conn.send({ type: "stop" });
+    });
+    conn.send({ type: "attach", server: backend.url, projectId: "p1", environment: "development" });
+    await conn.next("attached");
+    const bad: string[] = [];
+    const mode = (p: string) => fs.lstatSync(p).mode & 0o777;
+    if (mode(home) !== 0o700) bad.push(`CB_HOME ${mode(home).toString(8)}`);
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (mode(p) !== 0o700) bad.push(`${path.relative(home, p)}/ ${mode(p).toString(8)}`);
+          walk(p);
+        } else if ((mode(p) & 0o077) !== 0) bad.push(`${path.relative(home, p)} ${mode(p).toString(8)}`);
+      }
+    };
+    walk(home);
+    expect(bad).toEqual([]);
+    conn.close();
+  });
+
+  it("P8 a foreign client gets BAD_REQUEST for garbage, and no message type returns a token or a secret", async () => {
+    const { backend, env } = await setup();
+    const conn = await ipc.ensureAgent(env);
+    conn.send({ type: "attach", server: backend.url, projectId: "p1", environment: "development" });
+    await conn.next("attached");
+    const foreign = rawIpc(env);
+    await foreign.ready;
+    foreign.send("not json");
+    foreign.send(JSON.stringify({ type: "no-such-type" }));
+    foreign.send(JSON.stringify({ type: "status" }));
+    foreign.send(JSON.stringify({ type: "heap-snapshot", file: path.join(os.tmpdir(), "x.heapsnapshot") }));
+    foreign.send(JSON.stringify({ type: "attach", server: backend.url, projectId: "p1", environment: "development" }));
+    const out = await foreign.read(1500);
+    expect(out).toContain('"BAD_REQUEST"');
+    expect(out).toContain('"TEST_MODE_ONLY"');
+    expect(out).not.toContain(TOKEN);
+    expect(out).not.toContain("cbr_refresh_token");
+    foreign.close();
+    conn.close();
+  });
+
+  it("P9 S6 agent listeners accept only loopback connections", async () => {
+    const { backend, env } = await setup();
+    const conn = await ipc.ensureAgent(env);
+    conn.send({ type: "attach", server: backend.url, projectId: "p1", environment: "development" });
+    const attached = await conn.next("attached");
+    if (attached.type !== "attached") throw new Error("not attached");
+    const snapshot = JSON.parse(fs.readFileSync(attached.snapshotFile, "utf8"));
+    const port = Number(new URL(snapshot.env.REDIS_URL).port);
+    const lan = Object.values(os.networkInterfaces())
+      .flat()
+      .filter((a) => a && a.family === "IPv4" && !a.internal)
+      .map((a) => a?.address as string);
+    for (const ip of lan) {
+      const outcome = await new Promise<string>((resolve) => {
+        const s = net.connect(port, ip);
+        s.once("connect", () => {
+          s.destroy();
+          resolve("connected");
+        });
+        s.once("error", (e: NodeJS.ErrnoException) => resolve(e.code ?? "error"));
+      });
+      expect(outcome, `listener reachable on ${ip}`).not.toBe("connected");
+    }
+    conn.close();
+  });
+});
+
+/**
+ * M13: what another local process does to open a debugger in a running Node: SIGUSR1 on POSIX, and on Windows
+ * process._debugProcess(pid) (a remote thread through the "node-debug-handler-<pid>" mapping). With --disable-sigusr1
+ * the agent never registers that handler, so on Windows the call throws; that refusal is the expected outcome.
+ * The Windows branch runs in CI only (windows-latest); it can't be exercised on macOS/Linux.
+ */
+function askForDebugger(pid: number): void {
+  if (process.platform !== "win32") {
+    process.kill(pid, "SIGUSR1");
+    return;
+  }
+  const { _debugProcess } = process as NodeJS.Process & { _debugProcess?: (pid: number) => void };
+  if (typeof _debugProcess !== "function") throw new Error("process._debugProcess is missing on this Node");
+  try {
+    _debugProcess.call(process, pid);
+  } catch {
+    // Refused: the agent has no debug handler to start.
+  }
+}
+
+describe("the agent can't be debugged by another local process (P5)", () => {
+  it("P5 M13 M14 a debugger request (SIGUSR1 / _debugProcess) starts no inspector, and the agent keeps running", async () => {
+    const { env } = await setup();
+    const conn = await ipc.ensureAgent(env);
+    conn.send({ type: "status" });
+    const status = await conn.next("status");
+    if (status.type !== "status") throw new Error("no status");
+    askForDebugger(status.pid);
+    await new Promise((r) => setTimeout(r, 800));
+    // M14: any inspector start counts, including "Starting inspector on 127.0.0.1:9229 failed" when the port is taken.
+    expect(fs.readFileSync(agentLogPath(env), "utf8")).not.toMatch(/inspector|Debugger listening/i);
+    conn.send({ type: "status" });
+    const after = await conn.next("status");
+    expect(after.type === "status" && after.pid).toBe(status.pid);
+    conn.close();
+  });
+  it("P5 an inherited NODE_OPTIONS (--inspect, --require) never reaches the agent", async () => {
+    const { env } = await setup();
+    const preload = path.join(os.tmpdir(), `cb-p5-preload-${process.pid}.cjs`);
+    fs.writeFileSync(preload, "process.stderr.write('PRELOAD-RAN\\n');");
+    const conn = await ipc.ensureAgent({ ...env, NODE_OPTIONS: `--inspect=127.0.0.1:0 --require ${preload}` });
+    await new Promise((r) => setTimeout(r, 500));
+    const log = fs.readFileSync(agentLogPath(env), "utf8");
+    expect(log).not.toMatch(/Debugger listening|inspector/i);
+    expect(log).not.toContain("PRELOAD-RAN");
+    conn.close();
+    fs.rmSync(preload, { force: true });
+  });
+});

@@ -1,4 +1,5 @@
-import { createHmac } from "node:crypto";
+import { createHmac, createPrivateKey } from "node:crypto";
+import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -187,6 +188,23 @@ describe.skipIf(!servicesAvailable())("examples/express-mongo under cb run (§15
     suite.saveResponse("leak", text);
     expect(res.status).toBe(200);
     expect(text).not.toContain(suite.canaries.stripe);
+    // N3: the echo header reaches the app redacted too.
+    expect(text).toContain("x-echo-key");
+    expect(text).toContain("[cb-redacted]");
+  });
+
+  it("F6 the Google key file cb wrote is a valid fake: parseable, never the real private key", () => {
+    const fakeDir = path.join(suite.cbHome, "fake");
+    const files = fs
+      .readdirSync(fakeDir, { recursive: true })
+      .map(String)
+      .filter((f) => f.endsWith(".json"));
+    expect(files.length).toBeGreaterThan(0);
+    for (const f of files) {
+      const sa = JSON.parse(fs.readFileSync(path.join(fakeDir, f), "utf8")) as { private_key: string };
+      expect(() => createPrivateKey(sa.private_key)).not.toThrow();
+      expect(sa.private_key).not.toBe(suite.canaries.googlePrivateKey);
+    }
   });
 
   it("§15 mock upstreams received only real secrets, never a fake", () => {

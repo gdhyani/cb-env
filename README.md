@@ -7,6 +7,8 @@ Run your app with real databases and APIs without ever holding a real secret: th
 
 ## Quick start
 
+Requires Node.js 22.14 or newer.
+
 ```bash
 npm i -D @cb/env
 npx cb login            # approve this device in the dashboard

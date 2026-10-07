@@ -4,6 +4,7 @@ import net from "node:net";
 import path from "node:path";
 import { z } from "zod";
 import { AGENT_START_TIMEOUT_MS, AGENT_VERSION, ENV } from "../constants";
+import { openPrivate } from "./files";
 import { agentLogPath, agentSocketPath } from "./paths";
 
 /** CLI → agent requests (newline-delimited JSON over the control socket). */
@@ -185,6 +186,11 @@ async function probe(env: NodeJS.ProcessEnv): Promise<boolean> {
   return Boolean(conn);
 }
 
+/** M12 / P5: whether this Node accepts --disable-sigusr1 (added in Node 22.14.0); older 22.x would drop it silently. */
+export function supportsNoDebuggerFlag(flags: ReadonlySet<string> = process.allowedNodeEnvironmentFlags): boolean {
+  return flags.has("--disable-sigusr1");
+}
+
 /**
  * FR-AGT-001/007: connect to the agent, starting it detached (own process group, output to the agent log)
  * when it isn't running. A concurrent start by another `cb run` is fine: the loser exits on the single-instance lock.
@@ -203,12 +209,15 @@ export async function ensureAgent(env: NodeJS.ProcessEnv = process.env): Promise
     while (Date.now() < gone && (await probe(env))) await new Promise((r) => setTimeout(r, 100));
   }
   const log = agentLogPath(env);
-  fs.mkdirSync(path.dirname(log), { recursive: true });
-  const out = fs.openSync(log, "a");
-  const child = spawn(process.execPath, [agentEntry()], {
+  const out = openPrivate(log, "a");
+  // P5: no other local process may open a debugger in the agent (it holds this device's tokens) with SIGUSR1.
+  const noDebugger = supportsNoDebuggerFlag() ? ["--disable-sigusr1"] : [];
+  // An inherited NODE_OPTIONS (--inspect, --require …) would open a debugger or run foreign code in the agent.
+  const { NODE_OPTIONS: _ignored, ...agentEnv } = env;
+  const child = spawn(process.execPath, [...noDebugger, agentEntry()], {
     detached: true,
     stdio: ["ignore", out, out],
-    env: { ...env, CB_AGENT_VERSION: AGENT_VERSION, [ENV.agentBuild]: build },
+    env: { ...agentEnv, CB_AGENT_VERSION: AGENT_VERSION, [ENV.agentBuild]: build },
     windowsHide: true,
   });
   child.unref();
