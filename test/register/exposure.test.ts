@@ -62,7 +62,8 @@ describe("app process and children see stand-ins only (R1–R8, C1–C5)", () =>
       console.log(JSON.stringify({
         env: cp.execSync("env").toString().includes(${JSON.stringify(STANDIN)}),
         sh: cp.execSync("sh -c 'printf %s \\"$STRIPE_SECRET_KEY\\"'").toString(),
-        py: ${hasPython} ? cp.execSync("python3 -c 'import os;print(os.environ[\\"STRIPE_SECRET_KEY\\"],end=\\"\\")'").toString() : null,
+        // execFileSync, not execSync: cmd.exe (Windows) does not understand single quotes.
+        py: ${hasPython} ? cp.execFileSync("python3", ["-c", "import os;print(os.environ['STRIPE_SECRET_KEY'],end='')"]).toString() : null,
       }));`);
     expect(out.env).toBe(true);
     expect(out.sh).toBe(STANDIN);
