@@ -357,17 +357,37 @@ describe("what the agent exposes on this laptop (P8, P9, P10, S6)", () => {
   });
 });
 
+/**
+ * M13: what another local process does to open a debugger in a running Node: SIGUSR1 on POSIX, and on Windows
+ * process._debugProcess(pid) (a remote thread through the "node-debug-handler-<pid>" mapping). With --disable-sigusr1
+ * the agent never registers that handler, so on Windows the call throws; that refusal is the expected outcome.
+ * The Windows branch runs in CI only (windows-latest); it can't be exercised on macOS/Linux.
+ */
+function askForDebugger(pid: number): void {
+  if (process.platform !== "win32") {
+    process.kill(pid, "SIGUSR1");
+    return;
+  }
+  const { _debugProcess } = process as NodeJS.Process & { _debugProcess?: (pid: number) => void };
+  if (typeof _debugProcess !== "function") throw new Error("process._debugProcess is missing on this Node");
+  try {
+    _debugProcess.call(process, pid);
+  } catch {
+    // Refused: the agent has no debug handler to start.
+  }
+}
+
 describe("the agent can't be debugged by another local process (P5)", () => {
-  it("P5 SIGUSR1 does not open a debugger in the agent, and the agent keeps running", async () => {
-    if (process.platform === "win32") return; // no SIGUSR1 on Windows
+  it("P5 M13 M14 a debugger request (SIGUSR1 / _debugProcess) starts no inspector, and the agent keeps running", async () => {
     const { env } = await setup();
     const conn = await ipc.ensureAgent(env);
     conn.send({ type: "status" });
     const status = await conn.next("status");
     if (status.type !== "status") throw new Error("no status");
-    process.kill(status.pid, "SIGUSR1");
+    askForDebugger(status.pid);
     await new Promise((r) => setTimeout(r, 800));
-    expect(fs.readFileSync(agentLogPath(env), "utf8")).not.toMatch(/Debugger listening/);
+    // M14: any inspector start counts, including "Starting inspector on 127.0.0.1:9229 failed" when the port is taken.
+    expect(fs.readFileSync(agentLogPath(env), "utf8")).not.toMatch(/inspector|Debugger listening/i);
     conn.send({ type: "status" });
     const after = await conn.next("status");
     expect(after.type === "status" && after.pid).toBe(status.pid);
