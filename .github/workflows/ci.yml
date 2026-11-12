@@ -138,3 +138,14 @@ jobs:
           CB_CONTRACT_PATH: https://raw.githubusercontent.com/gdhyani/cb-backend/main/contracts/openapi.yaml
       - name: Fail if the generated types drifted from the backend contract
         run: git diff --exit-code -- src/shared/contract
+
+  audit:
+    # M7: a high or critical advisory in a runtime dependency fails CI (dev-only tools are reviewed by hand).
+    name: no high or critical runtime advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm audit --omit=dev --audit-level=high
