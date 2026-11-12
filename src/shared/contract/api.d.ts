@@ -1453,17 +1453,25 @@ export interface components {
             version: number;
             hasAccess: boolean;
         };
+        /** @description Whether the provider still accepts the stored key (never the key). `rejected` is shown as Expired. */
+        KeyHealth: {
+            /** @enum {string} */
+            status: "ok" | "rejected" | "unknown";
+            reason: string | null;
+            checkedAt: string | null;
+        };
         /** @description Credentials are write-only and never returned (L15, S2). */
         Resource: {
             id: components["schemas"]["ObjectId"];
             environmentId: components["schemas"]["ObjectId"];
             kind: components["schemas"]["ResourceKind"];
             name: string;
-            /** @description Non-secret configuration (e.g. host, database, tls, upstreamUrl, authScheme, fakePrefix, basePath, redirectHosts, region, endpoint, tokenUrl, projectId, clientEmail, keyId, teamId). Never contains credentials. */
+            /** @description Non-secret configuration (e.g. host, database, tls, upstreamUrl, authScheme, fakePrefix, basePath, redirectHosts, region, endpoint, tokenUrl, projectId, clientEmail, keyId, teamId). Never contains credentials. A CA certificate is shown only as `caCertFile` ({subject, notAfter, size}); `caCert` (the PEM) is never returned, including for rows stored before the file-store migration. */
             config: {
                 [key: string]: unknown;
             };
             credentialsSet: boolean;
+            health: components["schemas"]["KeyHealth"];
             rotatedAt: string | null;
             disabled: boolean;
             /** @description Variable fields this resource can broker. */
