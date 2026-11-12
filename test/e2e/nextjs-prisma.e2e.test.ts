@@ -2,8 +2,9 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { cbEnvFor, cbRunOnce, type RunningApp, runExample } from "./harness/app";
+import { cbEnvFor, cbRunOnce, developerPreloadOptions, type RunningApp, runExample } from "./harness/app";
 import { servicesAvailable } from "./harness/config";
+import { hookedProcesses } from "./harness/evidence";
 import { listFiles } from "./harness/scan";
 import { type Suite, startSuite } from "./harness/suite";
 
@@ -98,7 +99,8 @@ describe.skipIf(!servicesAvailable())(`T3 examples/nextjs-prisma under cb run (N
 
       beforeAll(async () => {
         fs.rmSync(path.join(dir, ".next"), { recursive: true, force: true });
-        const env = cbEnvFor(suite.cbHome, suite.evidence);
+        // OQ6: the app runs with the developer's own --require preload (it also loads the evidence hook).
+        const env = cbEnvFor(suite.cbHome, suite.evidence, { NODE_OPTIONS: developerPreloadOptions() });
         const logFile = path.join(suite.evidence, "cli.log");
         for (const cmd of commands.slice(0, -1))
           await cbRunOnce(suite.cfg, { dir, command: [npx, ...cmd], env, logFile });
@@ -155,6 +157,21 @@ describe.skipIf(!servicesAvailable())(`T3 examples/nextjs-prisma under cb run (N
         save("action", payload);
         expect(res.status, payload.slice(0, 300)).toBe(200);
         expect(payload).toMatch(/^1:\d+$/m);
+      });
+
+      it("OQ6 the developer's own --require preload ran in every Node process under next", () => {
+        const marked = new Set(
+          fs
+            .readdirSync(suite.evidence)
+            .filter((f) => f.startsWith("developer-preload."))
+            .map((f) => Number(f.split(".")[1])),
+        );
+        // The Next server process itself (dev server worker or `next start`), started by Next with re-parsed NODE_OPTIONS.
+        const nextProcesses = hookedProcesses(suite.evidence).filter((p) =>
+          /next[\\/]dist[\\/]server[\\/]/.test(p.argv),
+        );
+        expect(nextProcesses.length).toBeGreaterThan(0);
+        for (const p of nextProcesses) expect(marked.has(p.pid), p.argv).toBe(true);
       });
 
       it("T3 every Node process under next is hooked and dumps its env and heap", async () => {

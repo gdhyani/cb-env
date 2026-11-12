@@ -13,15 +13,7 @@ import { requireProjectConfig } from "../../shared/project-config";
 import type { Snapshot } from "../../shared/schemas";
 import { loadState } from "../../shared/state";
 import { note, resolveServer } from "../context";
-
-export function quoteNodeOption(value: string): string {
-  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
-}
-
-export function appendNodeOption(existing: string | undefined, option: string): string {
-  if (!existing) return option;
-  return existing.includes(option) ? existing : `${existing} ${option}`;
-}
+import { appendNodeOption, preloadNodeOption } from "../node-options";
 
 export function registerPath(): string {
   // dist/cli/commands/run.js → dist/register/index.js
@@ -41,7 +33,7 @@ export function buildChildEnv(
     ...snapshot.env,
     [ENV.snapshot]: snapshotFile,
     ...(listenFile ? { [ENV.listenFile]: listenFile } : {}),
-    NODE_OPTIONS: appendNodeOption(parent.NODE_OPTIONS, `--require ${quoteNodeOption(register)}`),
+    NODE_OPTIONS: appendNodeOption(parent.NODE_OPTIONS, preloadNodeOption(parent.NODE_OPTIONS, register)),
   };
 }
 

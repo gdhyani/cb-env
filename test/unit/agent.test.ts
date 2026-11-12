@@ -3,11 +3,13 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { allocatePorts, isPortFree } from "../../src/agent/ports";
 import { renderSnapshot } from "../../src/agent/snapshot";
 import { wrapScripts } from "../../src/cli/commands/init";
-import { appendNodeOption, buildChildEnv, quoteNodeOption } from "../../src/cli/commands/run";
+import { buildChildEnv } from "../../src/cli/commands/run";
+import { appendNodeOption, quoteNodeOption } from "../../src/cli/node-options";
 import { shouldReplace } from "../../src/shared/agent-ipc";
 import { getServerCredentials, removeServerCredentials, saveServerCredentials } from "../../src/shared/credentials";
 import { keychainEnabled } from "../../src/shared/keychain";
@@ -76,7 +78,8 @@ describe("cb run child env (FR-PKG-004)", () => {
     const env = buildChildEnv({ PORT: "9999", NODE_OPTIONS: "--max-old-space-size=256" }, snap, "/s.json", "/r.js");
     expect(env.PORT).toBe("3000");
     expect(env.CB_SNAPSHOT_PATH).toBe("/s.json");
-    expect(env.NODE_OPTIONS).toBe('--max-old-space-size=256 --require "/r.js"');
+    // OQ6: the preload is loaded with --import (file URL), so a developer's own --require survives Next's re-parse.
+    expect(env.NODE_OPTIONS).toBe(`--max-old-space-size=256 --import ${pathToFileURL("/r.js").href}`);
     expect(appendNodeOption('--require "/r.js"', '--require "/r.js"')).toBe('--require "/r.js"');
   });
 
