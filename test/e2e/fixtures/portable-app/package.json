@@ -1,0 +1,5 @@
+{
+  "name": "cb-portable-e2e-app",
+  "private": true,
+  "description": "§13 portable canary app (M7): no Docker services; resolves mongodb from @cb/env's own devDependencies."
+}
