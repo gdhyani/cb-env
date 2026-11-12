@@ -1,0 +1,12 @@
+{
+  "name": "cb-t2-bench-app",
+  "private": true,
+  "description": "T2 benchmark client (M7): official drivers only, run directly and under cb run.",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1168.0",
+    "ioredis": "^6.0.0",
+    "mongodb": "^7.9.0",
+    "pg": "^8.23.1"
+  }
+}
