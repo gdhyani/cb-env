@@ -9,14 +9,17 @@ describe("§14 preload startup (M7)", () => {
       env: { PORT: "3000", APP_NAME: "bench" },
       redirects: { "api.cbtest.dev:443": 7499 },
     });
-    const without = await measureStartup({ runs: 40, warmup: 5, withPreload: false, snapshotPath });
-    const withPreload = await measureStartup({ runs: 40, warmup: 5, withPreload: true, snapshotPath });
+    const run = (mode: "none" | "shipped" | "require") => measureStartup({ runs: 40, warmup: 5, mode, snapshotPath });
+    const without = await run("none");
+    const shipped = await run("shipped");
+    const required = await run("require");
     const base = percentile(without, 50);
-    const cb = percentile(withPreload, 50);
+    const cb = percentile(shipped, 50);
     console.log(
-      `preload startup: node -e 0 median ${base.toFixed(2)} ms, with preload ${cb.toFixed(2)} ms, delta ${(cb - base).toFixed(2)} ms`,
+      `preload startup: node -e 0 median ${base.toFixed(2)} ms, as cb run loads it (--import) ${cb.toFixed(2)} ms, delta ${(cb - base).toFixed(2)} ms; with --require delta ${(percentile(required, 50) - base).toFixed(2)} ms`,
     );
     expect(without).toHaveLength(40);
+    // §14 is about what users get: the NODE_OPTIONS cb run actually adds.
     expect(cb - base).toBeLessThanOrEqual(10);
   });
 });

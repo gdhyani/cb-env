@@ -19,7 +19,9 @@ interface Workload {
 
 const APP = path.resolve(__dirname, "t2-app");
 const CLIENT = path.join(APP, "client.mjs");
-const run = servicesAvailable() ? describe : describe.skip;
+// A benchmark that silently measures nothing is worse than a failure: `npm run bench` needs the compose services.
+if (!servicesAvailable())
+  throw new Error("T2 needs the compose test services: set CB_TEST_DB_PASSWORD and CB_TEST_REDIS_PASSWORD");
 
 /** Runs the client directly with the real upstream values (the "no cb" baseline). */
 function runDirect(env: NodeJS.ProcessEnv): Promise<Workload[]> {
@@ -45,7 +47,7 @@ const byName = (ws: Workload[], name: Workload["workload"]) => {
   return w;
 };
 
-run("T2 gateway latency (§6, M7)", () => {
+describe("T2 gateway latency (§6, M7)", () => {
   let suite: Suite;
   let directEnv: NodeJS.ProcessEnv;
   let direct: Workload[];
