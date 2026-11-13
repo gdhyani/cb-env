@@ -340,6 +340,27 @@ export interface paths {
         get: operations["getMe"];
         put?: never;
         post?: never;
+        /**
+         * Delete the signed-in user's account (FR-ACC-001)
+         * @description Re-checks the password and needs `confirm` equal to the account email (case-insensitive). Organizations where the user is the only owner are deleted with all their data; in every other organization the user is removed (audit `member.removed`). Devices, sessions and grants are deleted and the session cookie is cleared. Errors - 403 WRONG_PASSWORD, 400 CONFIRMATION_MISMATCH.
+         */
+        delete: operations["deleteAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/me/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What deleting the account would delete or leave (FR-ACC-003) */
+        get: operations["getAccountDeletionPreview"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -606,7 +627,11 @@ export interface paths {
         get: operations["getOrg"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete an organization and all its data (owners only, FR-ACC-002)
+         * @description Re-checks the password and needs `confirm` equal to the organization name. Hard-deletes projects, environments, variables, services and their secrets, grants, invites, kill switches, audit events and memberships; live tunnels close. Errors - 403 FORBIDDEN (not an owner), 403 WRONG_PASSWORD, 400 CONFIRMATION_MISMATCH.
+         */
+        delete: operations["deleteOrg"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1567,6 +1592,7 @@ export interface components {
              * @example error
              */
             outcome: string;
+            /** @description Null for system events; a deleted user reads name "Deleted user" with an empty email. */
             actor: {
                 id: components["schemas"]["ObjectId"];
                 name: string;
@@ -1702,6 +1728,26 @@ export interface components {
              */
             userCode: string;
             deviceName?: string;
+        };
+        DeleteConfirmBody: {
+            password: string;
+            /** @description The account email (account deletion) or the organization name (organization deletion). */
+            confirm: string;
+        };
+        AccountDeletionPreview: {
+            email: string;
+            /** @description Organizations where the user is the only owner; they are deleted with the account. */
+            orgsDeleted: {
+                id: string;
+                name: string;
+                memberCount: number;
+            }[];
+            /** @description Organizations the user is removed from. */
+            orgsLeft: {
+                id: string;
+                name: string;
+                role: components["schemas"]["Role"];
+            }[];
         };
         UpdateRoleBody: {
             role: components["schemas"]["Role"];
@@ -3011,6 +3057,69 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+                /** @description Must be `1` on every mutating request authenticated with the session cookie (otherwise 403 CSRF_REQUIRED). Ignored for device bearer tokens. */
+                "x-cb-csrf": components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteConfirmBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: {
+                            /** @constant */
+                            deleted: true;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAccountDeletionPreview: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: components["schemas"]["AccountDeletionPreview"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     previewInvite: {
         parameters: {
             query?: never;
@@ -3442,6 +3551,47 @@ export interface operations {
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteOrg: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Optional; generated when absent and echoed in the response header and meta. */
+                "x-correlation-id"?: components["parameters"]["CorrelationId"];
+                /** @description Must be `1` on every mutating request authenticated with the session cookie (otherwise 403 CSRF_REQUIRED). Ignored for device bearer tokens. */
+                "x-cb-csrf": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                /** @description Organization id */
+                orgId: components["parameters"]["orgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteConfirmBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data: {
+                            /** @constant */
+                            deleted: true;
+                        };
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
