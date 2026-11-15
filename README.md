@@ -1,5 +1,7 @@
 # @cb/env
 
+<p align="center"><img src=".github/readme/banner.png" alt="@cb/env: your .env, without the secrets. The app's .env holds placeholder values such as sk_test_cb… and a 127.0.0.1 database URL, and npx cb run connects it to the real services." width="100%"></p>
+
 Run your app with real databases and APIs without ever holding a real secret: the `cb` CLI, local agent and preload for cb credentialless development environments.
 
 **Documentation:** the cb dashboard serves the docs at `/docs`; their source is in
@@ -16,7 +18,7 @@ npx cb init             # link this folder to a cb project and wire your package
 npm run dev             # your app now runs under cb
 ```
 
-Your app reads stand-in values from `process.env`; the local agent tunnels its connections to the cb gateway,
+Your app reads placeholder values from `process.env`; the local agent tunnels its connections to the cb gateway,
 which uses the real credential. To run any other command the same way:
 
 ```bash
@@ -26,6 +28,16 @@ npx cb run -- node server.js
 `cb run` options: `--env <name>`, `--server <url>`, `--no-restart`, `--webhook-port <port>`.
 Other commands: `cb whoami`, `cb logout`, `cb status`, `cb doctor`, `cb shell`, `cb env print`, `cb env use <name>`,
 `cb types`, `cb up` / `cb down`, `cb agent status` / `cb agent stop`, `cb webhooks listen`.
+
+## How it works
+
+<p align="center"><img src=".github/readme/flow.png" alt="On the developer machine your app holds placeholders only. Layer 1: URL values point at the local agent on 127.0.0.1. Layer 2: the preload redirects fixed SDK hosts such as api.stripe.com to the agent, keeping SNI and TLS verification. The agent pipes bytes over one WSS tunnel per connection to the cb gateway in cb-backend, which checks the device and grant, adds the real key, redacts replies and audits." width="100%"></p>
+
+- **Preload** (`@cb/env/register`): loads the snapshot into `process.env` and redirects only the hosts cb manages. It never touches the network and fails closed if access is revoked.
+- **Agent**: a background process with `127.0.0.1` listeners. It is a byte pipe plus your device identity: no protocol parsing, no TLS termination, no real secrets.
+- **CLI** (`cb`): login, project setup, `cb run`, diagnostics.
+
+<p align="center"><img src=".github/readme/system.png" alt="The three cb repos: cb-dashboard and cb-env talk to cb-backend, the only repo that holds real keys, which reaches the real services with TLS verified." width="100%"></p>
 
 ## Development
 
