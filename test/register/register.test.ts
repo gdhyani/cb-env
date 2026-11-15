@@ -111,7 +111,7 @@ describe("preload redirection (FR-REG-003..006, L13, T1)", () => {
     expect(direct.stdout).toBe("direct");
   });
 
-  it("L13 the org CA is not trusted for non-redirected connections", async () => {
+  it("L13 S5 the org CA is not trusted for non-redirected connections", async () => {
     const r = await cjs(
       `require('tls').connect({ host: '127.0.0.1', port: ${probe.port}, servername: '${HOST}' }, () => console.log('connected')).on('error', () => console.log('rejected'));`,
     );

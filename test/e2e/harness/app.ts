@@ -25,6 +25,16 @@ export interface RunningApp {
 /** The harness's own secrets (compose passwords) must not reach the app through the inherited environment. */
 const HARNESS_ONLY = ["CB_TEST_DB_PASSWORD", "CB_TEST_REDIS_PASSWORD"];
 
+/**
+ * OQ6: NODE_OPTIONS as a developer with their own preload has it (`--require <file>`). That file loads the evidence
+ * hook, so the canary evidence also proves the developer's preload survived `cb run` and every tool that re-parses
+ * NODE_OPTIONS (Next.js).
+ */
+export function developerPreloadOptions(): string {
+  const file = path.join(__dirname, "..", "fixtures", "developer-preload.cjs");
+  return `--require "${file.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
 export function cbEnvFor(cbHome: string, evidenceDir: string, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   const inherited = Object.fromEntries(Object.entries(process.env).filter(([k]) => !HARNESS_ONLY.includes(k)));
   return {

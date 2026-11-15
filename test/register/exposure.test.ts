@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { quoteNodeOption } from "../../src/cli/commands/run";
+import { quoteNodeOption } from "../../src/cli/node-options";
 import { REGISTER, runNode, writeSnapshot } from "../helpers/run-node";
 
 /**

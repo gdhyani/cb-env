@@ -94,6 +94,37 @@ jobs:
         if: failure()
         run: docker compose -f cb-backend/docker-compose.test.yml logs --tail 50
 
+  e2e-portable:
+    # §13 canaries on every OS (M7): no Docker services, so macOS and Windows runners can run it.
+    name: e2e canaries portable (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: cb-env
+      - uses: actions/checkout@v5
+        with:
+          repository: gdhyani/cb-backend
+          ref: main
+          path: cb-backend
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm ci
+        working-directory: cb-backend
+      - run: npm ci && npm run build
+        working-directory: cb-env
+      - name: Run the portable canary suite (§13)
+        working-directory: cb-env
+        env:
+          CB_E2E_BACKEND_DIR: ${{ github.workspace }}/cb-backend
+        run: npm run test:e2e -- portable
+
   contract:
     name: contract types are current
     runs-on: ubuntu-latest
@@ -107,3 +138,14 @@ jobs:
           CB_CONTRACT_PATH: https://raw.githubusercontent.com/gdhyani/cb-backend/main/contracts/openapi.yaml
       - name: Fail if the generated types drifted from the backend contract
         run: git diff --exit-code -- src/shared/contract
+
+  audit:
+    # M7: a high or critical advisory in a runtime dependency fails CI (dev-only tools are reviewed by hand).
+    name: no high or critical runtime advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm audit --omit=dev --audit-level=high

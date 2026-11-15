@@ -20,7 +20,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "sync:contract": "node scripts/sync-contract.mjs",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "bench": "vitest run --config vitest.bench.config.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.8.1",
